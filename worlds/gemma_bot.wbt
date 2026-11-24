@@ -5,46 +5,35 @@ EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/project
 EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/objects/solids/protos/SolidBox.proto"
 
 WorldInfo {
-  basicTimeStep 16
-  title "Gemma-Bot Desktop Companion"
   info [
     "Gemma-Bot: An expressive desktop companion robot with animated OLED eyes, a servo head, camera, and touch sensor."
   ]
+  title "Gemma-Bot Desktop Companion"
+  basicTimeStep 16
 }
-
 Viewpoint {
-  orientation 1 0 0 1.570796
-  position 0 -0.40 0.14
+  orientation 0.061059499569659864 -0.07047738381890405 -0.9956428455436946 4.851019190051961
+  position -0.043958764102786124 -0.4381528573564823 0.16178183728373752
   follow "Gemma-Bot"
 }
-
 TexturedBackground {
   texture "empty_office"
 }
-
 TexturedBackgroundLight {
   luminosity 1.2
 }
-
-# Desk Surface (Stationary table, top at Z = 0)
 SolidBox {
   translation 0 0 -0.02
   name "desk"
   size 0.8 0.6 0.04
   appearance PBRAppearance {
-    baseColor 0.82 0.76 0.70
+    baseColor 0.82 0.76 0.7
     roughness 0.4
     metalness 0.1
   }
 }
-
-# Jamiryo Robot (Anchored static base - completely upright and cannot tilt)
 Robot {
-  translation 0 0 0
-  name "Gemma-Bot"
-  supervisor TRUE
   children [
-    # Static Grounded Base (Standing vertically along Z from 0 to 0.07)
     DEF BASE_SHAPE Pose {
       translation 0 0 0.035
       rotation 1 0 0 1.57079632679
@@ -62,8 +51,6 @@ Robot {
         }
       ]
     }
-
-    # Rubber Foot Ring at base
     Pose {
       translation 0 0 0.005
       rotation 1 0 0 1.57079632679
@@ -80,10 +67,9 @@ Robot {
         }
       ]
     }
-
-    # Head Pan (Yaw) Joint - Rotates left/right around vertical Z axis
     HingeJoint {
       jointParameters HingeJointParameters {
+        position -1.6717433419221797e-08
         axis 0 0 1
         anchor 0 0 0.07
         minStop -1.4
@@ -92,9 +78,9 @@ Robot {
       device [
         RotationalMotor {
           name "head_yaw"
-          sound ""
-          maxVelocity 4.0
+          maxVelocity 4
           maxTorque 1.5
+          sound ""
         }
         PositionSensor {
           name "yaw_sensor"
@@ -103,7 +89,6 @@ Robot {
       endPoint Solid {
         translation 0 0 0.07
         children [
-          # Neck bracket (Standing vertically along Z from 0.07 to 0.10)
           Pose {
             translation 0 0 0.015
             rotation 1 0 0 1.57079632679
@@ -120,11 +105,9 @@ Robot {
               }
             ]
           }
-
-          # Head Tilt (Pitch) Joint - Tilts up/down around horizontal X axis
           HingeJoint {
             jointParameters HingeJointParameters {
-              axis 1 0 0
+              position 0.32000002082981327
               anchor 0 0 0.03
               minStop -0.45
               maxStop 0.45
@@ -132,9 +115,9 @@ Robot {
             device [
               RotationalMotor {
                 name "head_pitch"
-                sound ""
                 maxVelocity 3.5
                 maxTorque 1.5
+                sound ""
               }
               PositionSensor {
                 name "pitch_sensor"
@@ -142,8 +125,8 @@ Robot {
             ]
             endPoint Solid {
               translation 0 0 0.03
+              rotation 1 0 0 0.3200000208298131
               children [
-                # Main Head Housing (Orange Box)
                 DEF HEAD_HOUSING Pose {
                   translation 0 0 0.045
                   children [
@@ -155,8 +138,6 @@ Robot {
                     }
                   ]
                 }
-
-                # Dark Curved Visor Faceplate (facing -Y toward user)
                 Pose {
                   translation 0 -0.0405 0.045
                   children [
@@ -167,34 +148,30 @@ Robot {
                         metalness 0.1
                       }
                       geometry Box {
-                        size 0.090 0.003 0.068
+                        size 0.09 0.003 0.068
                       }
                     }
                   ]
                 }
-
-                # OLED Display Face (128x64 pixels on front visor)
                 DEF OLED_DISPLAY Display {
                   translation 0 -0.0425 0.043
                   children [
                     Shape {
                       appearance PBRAppearance {
-                        baseColor 1 1 1
                         baseColorMap ImageTexture {
                           filtering 0
                         }
                         roughness 0.2
-                        metalness 0.0
-                        emissiveColor 0 0 0
-                        emissiveIntensity 0.0
+                        metalness 0
+                        emissiveIntensity 0
                       }
                       geometry IndexedFaceSet {
                         coord Coordinate {
                           point [
                             -0.038 0 -0.022
-                             0.038 0 -0.022
-                             0.038 0  0.022
-                            -0.038 0  0.022
+                            0.038 0 -0.022
+                            0.038 0 0.022
+                            -0.038 0 0.022
                           ]
                         }
                         texCoord TextureCoordinate {
@@ -216,20 +193,14 @@ Robot {
                   ]
                   name "oled_display"
                   width 128
-                  height 64
                 }
-
-                # Camera (forehead centered, looking forward at user)
                 Camera {
                   translation 0 -0.041 0.072
                   rotation 1 0 0 -1.570796
-                  name "camera"
+                  fieldOfView 1
                   width 160
                   height 120
-                  fieldOfView 1.0
                 }
-
-                # Capacitive Touch Sensor (Head Pat on top)
                 TouchSensor {
                   translation 0 0 0.085
                   rotation 1 0 0 1.57079632679
@@ -260,6 +231,8 @@ Robot {
                 density -1
                 mass 0.15
               }
+              linearVelocity -2.365445164077229e-09 9.111862631271903e-17 -5.698213147477336e-16
+              angularVelocity -3.0426480817714304e-15 5.863609067461172e-14 -1.671742312790367e-07
             }
           }
         ]
@@ -277,9 +250,12 @@ Robot {
           density -1
           mass 0.05
         }
+        linearVelocity 4.932988999091312e-13 2.2745259233391058e-17 1.7763790837667463e-16
+        angularVelocity -3.3284148345851474e-15 3.825745282269037e-14 -1.6717428280075356e-07
       }
     }
   ]
+  name "Gemma-Bot"
   boundingObject Pose {
     translation 0 0 0.035
     rotation 1 0 0 1.57079632679
@@ -291,4 +267,5 @@ Robot {
     ]
   }
   controller "gemma_bot_controller"
+  supervisor TRUE
 }

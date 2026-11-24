@@ -7,6 +7,11 @@ A complete Webots simulation of **Gemma-Bot**, an expressive desktop companion r
 ![AI-Enabled](https://img.shields.io/badge/AI-Command--Integrated-brightgreen.svg)
 ![License](https://img.shields.io/badge/License-MIT-orange.svg)
 
+<div align="center">
+  <img src="docs/assets/gemma_bot_webots.jpg" alt="Gemma-Bot in Webots Simulation" width="650"/>
+  <p><em>Gemma-Bot desktop companion robot rendered inside Cyberbotics Webots with high-contrast OLED display.</em></p>
+</div>
+
 ---
 
 ## ✨ Features
@@ -15,28 +20,39 @@ A complete Webots simulation of **Gemma-Bot**, an expressive desktop companion r
 - **Audible Talk-Back & Lip-Sync**: Gemma-Bot speaks out loud with native voice synthesis and synchronizes an animated talking mouth on its OLED display with conversational micro-nodding.
 - **Whisper-Quiet Servos**: Motor whining sounds are completely muted via `sound ""` configuration for clean, silent motion.
 - **Gemma-Talk Voice Assistant Bridge (`gemma_talk_bridge.py`)**: Seamlessly connects to your local `gemma-talk` voice assistant (Silero VAD, faster-whisper, Ollama gemma, Kokoro-82M TTS) so Gemma-Bot acts as the physical companion embodiment for your voice conversations!
-- **Expressive OLED Eyes**: Animated in real-time on a 128×64 pixel display with natural blinks, saccades, and multiple emotional states (`HAPPY`, `SURPRISED`, `SLEEPY`, `ANGRY`, `THINKING`, `LOVE`, `NEUTRAL`).
-- **Physical Gesture Engine**:
-  - `nod`: Double nodding agreement up and down.
-  - `shake`: Shaking head left and right (disagreement).
-  - `wiggle`: Happy companion shimmy.
-  - `curious` / `tilt`: Inquisitive head tilt with angled eye gaze.
-  - `tilt_left` / `tilt_right`: Sustained curious head tilt to either side.
-  - `perk_up`: Attentive upward head motion for surprises.
-  - `droop`: Sleepy or sad head drop forward.
-  - `bounce` / `hop`: Fast vertical energetic bobbing.
-  - `groove` / `dance`: Figure-8 rhythmic head dance.
-  - `shiver` / `tremble`: High-frequency micro-jitter (cold/nervous/crying).
-  - `scan` / `look_around`: Smooth panoramic room scan with wide sweeping gaze.
-  - `confused`: Puzzled alternating tilt left and right.
-  - `bow`: Polite formal bow forward and rise.
-  - `cheer` / `celebrate`: Head tossed back in joy with happy shakes.
-  - `yawn`: Slow upward stretch then relaxing forward slump.
-  - `shy` / `bashful`: Head turns away and tucks down.
-  - `peek_a_boo`: Dips down with closed eyes then energetically pops up!
-  - `dizzy_spin`: Smooth orbital circular head roll.
+- **High-Contrast OLED Screen & Selectable Color Themes**: 128×64 pixel display with true OLED blacks (no white blowout) and 6 switchable color themes (Electric Cyan, Matrix Emerald, Retro Amber, Neon Blue, Cyberpunk Violet, High Contrast White).
+- **Physical Gesture Engine**: 18 lifelike multi-phase trajectory gestures (`nod`, `shake`, `wiggle`, `curious`, `tilt_left`, `tilt_right`, `perk_up`, `droop`, `bounce`, `groove`, `shiver`, `scan`, `confused`, `bow`, `cheer`, `yawn`, `shy`, `peek_a_boo`, `dizzy_spin`).
 - **Embedded HTTP Command Server**: The Webots controller runs an HTTP REST endpoint on `http://127.0.0.1:8765/command` to accept commands from any external AI agent, script, or web app.
-- **Autonomous Idle Life**: Automatically glances around the room and blinks naturally when idle.
+- **Autonomous Idle Life**: Automatically glances around the room, blinks naturally, and exhibits organic micro-movements when idle.
+
+---
+
+## 🎭 Expressive OLED Expressions Suite
+
+Gemma-Bot features 15 distinct animated companion moods and emoji expressions rendered on its 128×64 OLED visor:
+
+<div align="center">
+  <img src="docs/assets/expressions_grid.png" alt="Gemma-Bot OLED Expressions Suite" width="950"/>
+</div>
+
+---
+
+## 🎨 Selectable Screen Color Themes
+
+You can customize the robot's screen colors at runtime. Press **`X`** in the Webots window, use natural language in the CLI, or send a JSON command:
+
+<div align="center">
+  <img src="docs/assets/color_themes.png" alt="Gemma-Bot Screen Color Themes" width="750"/>
+</div>
+
+| Theme | Accent Color | Description | Quick CLI Command |
+| :--- | :---: | :--- | :--- |
+| **Electric Cyan** | `#00F0FF` | Default vibrant neon OLED cyan | `python3 ai_assistant.py "cyan screen"` |
+| **Matrix Emerald** | `#00FF66` | Retro phosphor green terminal | `python3 ai_assistant.py "green screen"` |
+| **Retro Amber** | `#FFAA00` | Warm golden amber CRT glow | `python3 ai_assistant.py "amber screen"` |
+| **Neon Blue** | `#2979FF` | Deep electric sapphire blue | `python3 ai_assistant.py "blue screen"` |
+| **Cyberpunk Violet** | `#D500F9` | Vivid futuristic magenta/purple | `python3 ai_assistant.py "purple screen"` |
+| **High Contrast White** | `#FFFFFF` | Crisp classic monochrome OLED | `python3 ai_assistant.py "white screen"` |
 
 ---
 
@@ -72,6 +88,9 @@ cd /Users/saiganeshtanneru/Documents/GitHub/robots/gemma-bot
 python3 ai_assistant.py "nod yes and smile"
 python3 ai_assistant.py "look left and act surprised"
 python3 ai_assistant.py "shake your head no"
+python3 ai_assistant.py "green screen"
+python3 ai_assistant.py "curious"
+python3 ai_assistant.py "perk up"
 python3 ai_assistant.py "tell me a joke"
 python3 ai_assistant.py "go to sleep"
 python3 ai_assistant.py "I love you"
@@ -89,6 +108,19 @@ python3 ai_assistant.py --status
 
 Gemma-Bot integrates directly with **Gemma-Talk** (`/Users/saiganeshtanneru/Documents/gemma-talk`), transforming your local voice assistant into an expressive physical desktop buddy:
 
+```mermaid
+flowchart LR
+    User[Voice Input / Mic] --> VAD[Silero VAD]
+    VAD --> STT[faster-whisper]
+    STT --> LLM[Ollama / Gemma]
+    LLM --> TTS[Kokoro-82M TTS]
+    LLM -. State & Tokens .-> Bridge[gemma_talk_bridge]
+    Bridge --> REST[Robot REST API :8765]
+    REST --> Webots[Gemma-Bot Webots Simulation]
+    Webots --> OLED[128x64 OLED Display]
+    Webots --> Servos[Pan/Tilt Servos]
+```
+
 1. **Start Gemma-Talk Backend Server**:
    ```bash
    cd /Users/saiganeshtanneru/Documents/gemma-talk
@@ -99,7 +131,7 @@ Gemma-Bot integrates directly with **Gemma-Talk** (`/Users/saiganeshtanneru/Docu
    cd /Users/saiganeshtanneru/Documents/GitHub/robots/gemma-bot
    python3 gemma_talk_bridge.py
    ```
-3. **Open Gemma-Talk in your browser** (`http://localhost:3000` or client).
+3. **Open Gemma-Talk in your browser** (`http://localhost:5173`).
    - When you speak, Gemma-Bot enters **LISTENING** mode (head perks up, eyes focus).
    - When Ollama generates the response, Gemma-Bot enters **THINKING** mode (curious head tilt, eyes look up with thinking dots).
    - When Kokoro synthesizes speech, Gemma-Bot enters **SPEAKING** mode (animated lip-sync, happy smile, conversational nodding).
@@ -117,6 +149,7 @@ curl -X POST http://127.0.0.1:8765/command \
      -d '{
        "mood": "HAPPY",
        "gesture": "nod",
+       "screen_color": "AMBER",
        "gaze": "left",
        "speech": "I am Gemma-Bot!"
      }'
@@ -127,6 +160,7 @@ curl -X POST http://127.0.0.1:8765/command \
 | :--- | :--- | :--- |
 | `mood` | string / emoji | `"NEUTRAL"`, `"HAPPY"`, `"COOL"`, `"STAR_EYES"`, `"PLEADING"`, `"CRYING"`, `"WINK"`, `"TONGUE"`, `"LOVE"`, `"DIZZY"`, `"SMIRK"`, `"SURPRISED"`, `"SLEEPY"`, `"ANGRY"`, `"THINKING"` (or raw emojis: `😎`, `🤩`, `🥺`, `😭`, `😉`, `😋`, `😍`, `😵`, `😏`, `😀`, `😮`, `😴`, `😡`, `🤔`) |
 | `gesture` | string | `"nod"`, `"shake"`, `"wiggle"`, `"curious"`, `"tilt_left"`, `"tilt_right"`, `"perk_up"`, `"droop"`, `"bounce"`, `"groove"`, `"shiver"`, `"scan"`, `"confused"`, `"bow"`, `"cheer"`, `"yawn"`, `"shy"`, `"peek_a_boo"`, `"dizzy_spin"` |
+| `screen_color` | string | `"CYAN"`, `"GREEN"`, `"AMBER"`, `"BLUE"`, `"PURPLE"`, `"WHITE"` |
 | `gaze` | string | `"left"`, `"right"`, `"up"`, `"down"`, `"center"` |
 | `look_at` | array `[yaw, pitch]` | e.g. `[0.4, -0.2]` (custom servo angles) |
 | `speech` | string | Spoken dialogue printed to console, spoken out loud, & animated on OLED display |
@@ -137,7 +171,7 @@ curl -X POST http://127.0.0.1:8765/command \
 
 Click into the 3D Webots viewport and use your keyboard:
 
-### Face Emojis:
+### Face Emojis & Display:
 | Key | Emoji / Mood | Expression |
 | :---: | :--- | :--- |
 | `1` | **Neutral 😐** | Natural random blinks and organic idle gaze |
@@ -155,6 +189,7 @@ Click into the 3D Webots viewport and use your keyboard:
 | `T` | **Tongue 😋** | Squinting happy eyes with cute pink tongue |
 | `D` | **Dizzy 😵** | Cross `X_X` eyes and wavy mouth |
 | `S` | **Smirk 😏** | Asymmetric eyebrow, sly side glance and smirk |
+| `X` | **Cycle Screen Color** | Cycle themes: Cyan → Green → Amber → Blue → Purple → White |
 
 ### Physical Head Gestures:
 | Key | Gesture | Motion Description |
