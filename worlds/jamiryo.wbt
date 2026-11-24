@@ -1,0 +1,287 @@
+#VRML_SIM R2025a utf8
+
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/objects/backgrounds/protos/TexturedBackground.proto"
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/objects/backgrounds/protos/TexturedBackgroundLight.proto"
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/objects/solids/protos/SolidBox.proto"
+
+WorldInfo {
+  basicTimeStep 16
+  coordinateSystem "NUE"
+  title "Jamiryo Desktop Buddy"
+  info [
+    "Jamiryo: An expressive desktop companion robot with animated OLED eyes, a servo head, camera, and touch sensor."
+  ]
+}
+
+Viewpoint {
+  orientation 0.038 -0.998 -0.054 2.82
+  position -0.04 0.22 0.48
+}
+
+TexturedBackground {
+  texture "empty_office"
+}
+
+TexturedBackgroundLight {
+  luminosity 1.2
+}
+
+# Desk Surface
+SolidBox {
+  translation 0 -0.02 0
+  name "desk"
+  size 0.8 0.04 0.6
+  appearance PBRAppearance {
+    baseColor 0.82 0.76 0.70
+    roughness 0.4
+    metalness 0.1
+  }
+}
+
+# Jamiryo Robot
+Robot {
+  translation 0 0 0
+  children [
+    # Static Base
+    DEF BASE_SHAPE Pose {
+      translation 0 0.035 0
+      children [
+        Shape {
+          appearance DEF ORANGE_BODY PBRAppearance {
+            baseColor 0.96 0.42 0.08
+            roughness 0.35
+            metalness 0.05
+          }
+          geometry Cylinder {
+            height 0.07
+            radius 0.048
+          }
+        }
+        # Dark base ring
+        Pose {
+          translation 0 -0.032 0
+          children [
+            Shape {
+              appearance PBRAppearance {
+                baseColor 0.15 0.15 0.16
+                roughness 0.5
+              }
+              geometry Cylinder {
+                height 0.01
+                radius 0.05
+              }
+            }
+          ]
+        }
+      ]
+    }
+
+    # Head Pan (Yaw) Joint
+    HingeJoint {
+      jointParameters HingeJointParameters {
+        axis 0 1 0
+        anchor 0 0.07 0
+        minStop -1.4
+        maxStop 1.4
+      }
+      device [
+        RotationalMotor {
+          name "head_yaw"
+          maxVelocity 4.0
+          maxTorque 1.5
+        }
+        PositionSensor {
+          name "yaw_sensor"
+        }
+      ]
+      endPoint Solid {
+        translation 0 0.07 0
+        children [
+          # Neck bracket
+          Pose {
+            translation 0 0.015 0
+            children [
+              Shape {
+                appearance PBRAppearance {
+                  baseColor 0.2 0.2 0.22
+                  roughness 0.4
+                }
+                geometry Cylinder {
+                  height 0.03
+                  radius 0.025
+                }
+              }
+            ]
+          }
+
+          # Head Tilt (Pitch) Joint
+          HingeJoint {
+            jointParameters HingeJointParameters {
+              axis 1 0 0
+              anchor 0 0.035 0
+              minStop -0.45
+              maxStop 0.45
+            }
+            device [
+              RotationalMotor {
+                name "head_pitch"
+                maxVelocity 3.5
+                maxTorque 1.5
+              }
+              PositionSensor {
+                name "pitch_sensor"
+              }
+            ]
+            endPoint Solid {
+              translation 0 0.035 0
+              children [
+                # Main Head Housing (Orange)
+                DEF HEAD_HOUSING Pose {
+                  translation 0 0.035 0
+                  children [
+                    Shape {
+                      appearance USE ORANGE_BODY
+                      geometry Box {
+                        size 0.095 0.075 0.08
+                      }
+                    }
+                  ]
+                }
+
+                # Dark Curved Visor
+                Pose {
+                  translation 0 0.035 0.0405
+                  children [
+                    Shape {
+                      appearance PBRAppearance {
+                        baseColor 0.04 0.04 0.05
+                        roughness 0.1
+                        metalness 0.2
+                      }
+                      geometry Box {
+                        size 0.088 0.065 0.003
+                      }
+                    }
+                  ]
+                }
+
+                # OLED Display Face (128x64 pixels)
+                DEF OLED_DISPLAY Display {
+                  translation 0 0.033 0.0425
+                  children [
+                    Shape {
+                      appearance PBRAppearance {
+                        baseColorMap ImageTexture {
+                          filtering 0
+                        }
+                        roughness 0.1
+                        metalness 0.0
+                        emissiveColor 1 1 1
+                        emissiveIntensity 1.0
+                      }
+                      geometry IndexedFaceSet {
+                        coord Coordinate {
+                          point [
+                            -0.038 -0.022 0
+                             0.038 -0.022 0
+                             0.038  0.022 0
+                            -0.038  0.022 0
+                          ]
+                        }
+                        texCoord TextureCoordinate {
+                          point [
+                            0 0
+                            1 0
+                            1 1
+                            0 1
+                          ]
+                        }
+                        coordIndex [
+                          0, 1, 2, 3, -1
+                        ]
+                        texCoordIndex [
+                          0, 1, 2, 3, -1
+                        ]
+                      }
+                    }
+                  ]
+                  name "oled_display"
+                  width 128
+                  height 64
+                }
+
+                # Camera (forehead centered)
+                Camera {
+                  translation 0 0.062 0.041
+                  rotation 0 1 0 0
+                  name "camera"
+                  width 160
+                  height 120
+                  fieldOfView 1.0
+                }
+
+                # Capacitive Touch Sensor (Head Pat on top)
+                TouchSensor {
+                  translation 0 0.074 0
+                  children [
+                    Shape {
+                      appearance PBRAppearance {
+                        baseColor 0.9 0.38 0.06
+                        roughness 0.4
+                      }
+                      geometry Cylinder {
+                        height 0.004
+                        radius 0.022
+                      }
+                    }
+                  ]
+                  name "head_touch"
+                  type "bumper"
+                }
+              ]
+              boundingObject Pose {
+                translation 0 0.035 0
+                children [
+                  Box {
+                    size 0.095 0.075 0.08
+                  }
+                ]
+              }
+              physics Physics {
+                density -1
+                mass 0.15
+              }
+            }
+          }
+        ]
+        boundingObject Pose {
+          translation 0 0.015 0
+          children [
+            Cylinder {
+              height 0.03
+              radius 0.025
+            }
+          ]
+        }
+        physics Physics {
+          density -1
+          mass 0.05
+        }
+      }
+    }
+  ]
+  boundingObject Pose {
+    translation 0 0.035 0
+    children [
+      Cylinder {
+        height 0.07
+        radius 0.048
+      }
+    ]
+  }
+  physics Physics {
+    density -1
+    mass 0.4
+  }
+  controller "jamiryo_controller"
+}
