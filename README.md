@@ -16,13 +16,13 @@ A complete Webots simulation of **Gemma-Bot**, an expressive desktop companion r
 
 ## ✨ Features
 
-- **AI Command Integration (`ai_assistant.py`)**: Send natural language commands (or structured JSON) directly from your terminal or an LLM/Gemini to control gestures, moods, gaze, and speech in real-time.
-- **Audible Talk-Back & Lip-Sync**: Gemma-Bot speaks out loud with native voice synthesis and synchronizes an animated talking mouth on its OLED display with conversational micro-nodding.
+- **AI Command Integration (`ai_assistant.py` + `intent_parser.py`)**: Send English, Telugu, or Tanglish prompts (parsed via Sarvam structured JSON output with strict allowlist validation and word-boundary keyword fallback) or raw JSON commands to control gestures, moods, gaze, and speech.
+- **Pluggable Speech & Audio-Duration Lip-Sync (`tts.py`)**: Supports `MacSayTTS` (default on macOS), `SarvamTTS` (Bulbul v3 cloud TTS for Telugu/Indian languages and Raspberry Pi Zero), and `NullTTS`, synchronizing OLED mouth animation to actual WAV audio duration when available.
 - **Whisper-Quiet Servos**: Motor whining sounds are completely muted via `sound ""` configuration for clean, silent motion.
-- **Gemma-Talk Voice Assistant Bridge (`gemma_talk_bridge.py`)**: Seamlessly connects to your local `gemma-talk` voice assistant (Silero VAD, faster-whisper, Ollama gemma, Kokoro-82M TTS) so Gemma-Bot acts as the physical companion embodiment for your voice conversations!
-- **High-Contrast OLED Screen & Selectable Color Themes**: 128×64 pixel display with true OLED blacks (no white blowout) and 6 switchable color themes (Electric Cyan, Matrix Emerald, Retro Amber, Neon Blue, Cyberpunk Violet, High Contrast White).
-- **Physical Gesture Engine**: 18 lifelike multi-phase trajectory gestures (`nod`, `shake`, `wiggle`, `curious`, `tilt_left`, `tilt_right`, `perk_up`, `droop`, `bounce`, `groove`, `shiver`, `scan`, `confused`, `bow`, `cheer`, `yawn`, `shy`, `peek_a_boo`, `dizzy_spin`).
-- **Embedded HTTP Command Server**: The Webots controller runs an HTTP REST endpoint on `http://127.0.0.1:8765/command` to accept commands from any external AI agent, script, or web app.
+- **Gemma-Talk Voice Assistant Bridge (`gemma_talk_bridge.py`)**: Non-blocking async WebSocket bridge connecting `gemma-talk` (Silero VAD, faster-whisper, Ollama, Kokoro TTS) to Gemma-Bot with barge-in preemption and Webots health monitoring.
+- **High-Contrast OLED Screen & Selectable Color Themes**: 128×64 pixel display (`faces/`) shared with `scripts/generate_readme_assets.py` across 6 switchable themes.
+- **Phase-Based Gesture Engine (`gestures.py`)**: 19 unified phase-normalized trajectory gestures (`nod`, `shake`, `wiggle`, `curious`, `tilt_left`, `tilt_right`, `perk_up`, `droop`, `bounce`, `groove`, `shiver`, `scan`, `confused`, `bow`, `cheer`, `yawn`, `shy`, `peek_a_boo`, `dizzy_spin`).
+- **Hardened Multi-Threaded HTTP Command Server (`server.py`)**: Runs `ThreadingHTTPServer` on `127.0.0.1:8765` by default (configured via `config.py`) with `X-Bot-Token` authentication, 413 payload limits, and JSON schema validation.
 - **Autonomous Idle Life**: Automatically glances around the room, blinks naturally, and exhibits organic micro-movements when idle.
 
 ---
@@ -56,12 +56,28 @@ You can customize the robot's screen colors at runtime. Press **`X`** in the Web
 
 ---
 
-## 🚀 Quick Start (1-Command All-In-One)
+## 🚀 Setup & Quick Start
 
-To launch **everything** (Ollama, Webots simulation in real-time mode, Gemma-Talk voice backend, physical gesture bridge, and web audio UI) with one command:
+### Installation
+```bash
+git clone <your-fork-or-repo-url> gemma-bot
+cd gemma-bot
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+cp .env.example .env   # optional: customize ports, tokens, TTS, or Sarvam API key
+```
+
+For development and tests:
+```bash
+pip install -r requirements-dev.txt
+pytest
+```
+
+### 1-Command All-In-One Launcher
+To launch **everything** (Ollama, Webots simulation in real-time mode, Gemma-Talk voice backend, `gemma_talk_bridge.py` with logging to `logs/gemma_talk_bridge.log`, and web audio UI):
 
 ```bash
-cd /Users/saiganeshtanneru/Documents/GitHub/robots/gemma-bot
 ./start_all.sh
 ```
 *(Or from `gemma-talk`, run `./start-with-bot.sh`).*
@@ -70,10 +86,62 @@ When running, just speak naturally into your microphone! Press **Ctrl+C** anytim
 
 ---
 
+## 🏗️ Architecture
+
+```text
++-------------------+      WS (:8000/ws)       +----------------------+
+| Gemma-Talk Server | -----------------------> | gemma_talk_bridge.py |
+| (VAD/STT/LLM/TTS) |   state/flush/sentence   | (async + health/back)|
++-------------------+                          +----------+-----------+
+                                                          | HTTP POST /command
++-------------------+   LLM / Keyword Intent              v  (X-Bot-Token)
+|  ai_assistant.py  | ---------------------------> +------+------------------+
+| (intent_parser.py)|                              | BotCommandHTTPServer    |
++-------------------+                              | (ThreadingHTTPServer)   |
+                                                   +------+------------------+
+                                                          | COMMAND_QUEUE
+                                                          v
++---------------------------------------------------------+------------------+
+| Webots Controller (controllers/gemma_bot_controller/gemma_bot_controller.py)|
+|  - input_map.py (KEYMAP + edge-triggered head_touch)                       |
+|  - gestures.py  (phase-normalized GESTURES registry, p in [0, 1])          |
+|  - faces/       (FaceRenderer shared with scripts/generate_readme_assets)  |
+|  - tts.py       (MacSayTTS / SarvamTTS / NullTTS -> audio-duration lipsync)|
++----------------------------------------------------------------------------+
+```
+
+---
+
+## ⚙️ Environment Variables (`.env.example`)
+
+All defaults live in `config.py` and can be overridden via environment variables or `.env`:
+
+| Variable | Default | Description |
+| :--- | :--- | :--- |
+| `GEMMA_BOT_HOST` | `127.0.0.1` | Bind host (`0.0.0.0` requires `GEMMA_BOT_TOKEN`) |
+| `GEMMA_BOT_PORT` | `8765` | Embedded HTTP command server port |
+| `GEMMA_BOT_URL` | `http://<host>:<port>` | Base URL used by `ai_assistant.py` & bridge |
+| `GEMMA_BOT_TOKEN` | `""` | Shared secret checked via `X-Bot-Token` |
+| `GEMMA_MAX_BODY_BYTES` | `16384` | Max `/command` JSON body size before `413` |
+| `GEMMA_TALK_WS_URL` | `ws://localhost:8000/ws` | Gemma-Talk WebSocket endpoint |
+| `GEMMA_TALK_DIR` | `~/Documents/gemma-talk` | Path to local `gemma-talk` checkout |
+| `WEBOTS_APP` | `/Applications/Webots.app/Contents/MacOS/webots` | Webots executable path |
+| `GEMMA_TTS_PROVIDER` | `mac_say` (macOS) / `null` (other) | `mac_say`, `sarvam`, or `null` |
+| `GEMMA_TTS_MAC_VOICE` | `Samantha` | macOS `say` voice name |
+| `SARVAM_API_KEY` | `""` | Sarvam AI key (env-only; never commit) |
+| `GEMMA_SARVAM_TTS_MODEL` | `bulbul:v3` | Sarvam TTS model (`bulbul:v3` / `bulbul:v4-flash`) |
+| `GEMMA_SARVAM_TTS_SPEAKER` | `shubh` | Sarvam TTS voice persona |
+| `GEMMA_SARVAM_TTS_LANGUAGE` | `en-IN` | Default BCP-47 language (auto-switches `te-IN` for Telugu script) |
+| `GEMMA_INTENT_PROVIDER` | `sarvam` if key set else `keyword` | `sarvam` or `keyword` |
+| `GEMMA_SARVAM_LLM_MODEL` | `sarvam-105b` | Sarvam Chat Completions model |
+| `GEMMA_INTENT_TIMEOUT` | `4.0` | Timeout (seconds) before falling back to keyword parser |
+
+---
+
 ## 🛠️ Individual Manual Controls
 
 ### 1. Launch in Webots Manually
-1. Open **Webots** (`/Applications/Webots.app`).
+1. Open **Webots**.
 2. Go to **File → Open World...** and select `worlds/gemma_bot.wbt`.
 3. Press the **Play (▶)** button on the top toolbar.
 
@@ -82,9 +150,7 @@ When running, just speak naturally into your microphone! Press **Ctrl+C** anytim
 In a terminal, run:
 
 ```bash
-cd /Users/saiganeshtanneru/Documents/GitHub/robots/gemma-bot
-
-# Quick single natural language commands:
+# Quick single natural language commands (English, Telugu, or Tanglish with Sarvam):
 python3 ai_assistant.py "nod yes and smile"
 python3 ai_assistant.py "look left and act surprised"
 python3 ai_assistant.py "shake your head no"
@@ -106,29 +172,15 @@ python3 ai_assistant.py --status
 
 ## 🎙️ Reusing with Gemma-Talk (Voice Assistant Companion)
 
-Gemma-Bot integrates directly with **Gemma-Talk** (`/Users/saiganeshtanneru/Documents/gemma-talk`), transforming your local voice assistant into an expressive physical desktop buddy:
-
-```mermaid
-flowchart LR
-    User[Voice Input / Mic] --> VAD[Silero VAD]
-    VAD --> STT[faster-whisper]
-    STT --> LLM[Ollama / Gemma]
-    LLM --> TTS[Kokoro-82M TTS]
-    LLM -. State & Tokens .-> Bridge[gemma_talk_bridge]
-    Bridge --> REST[Robot REST API :8765]
-    REST --> Webots[Gemma-Bot Webots Simulation]
-    Webots --> OLED[128x64 OLED Display]
-    Webots --> Servos[Pan/Tilt Servos]
-```
+Gemma-Bot integrates directly with **Gemma-Talk** (`$GEMMA_TALK_DIR`), transforming your local voice assistant into an expressive physical desktop buddy:
 
 1. **Start Gemma-Talk Backend Server**:
    ```bash
-   cd /Users/saiganeshtanneru/Documents/gemma-talk
+   cd "$GEMMA_TALK_DIR"
    ./start-server.sh
    ```
 2. **Start the Bridge in Gemma-Bot**:
    ```bash
-   cd /Users/saiganeshtanneru/Documents/GitHub/robots/gemma-bot
    python3 gemma_talk_bridge.py
    ```
 3. **Open Gemma-Talk in your browser** (`http://localhost:5173`).
@@ -164,6 +216,31 @@ curl -X POST http://127.0.0.1:8765/command \
 | `gaze` | string | `"left"`, `"right"`, `"up"`, `"down"`, `"center"` |
 | `look_at` | array `[yaw, pitch]` | e.g. `[0.4, -0.2]` (custom servo angles) |
 | `speech` | string | Spoken dialogue printed to console, spoken out loud, & animated on OLED display |
+
+---
+
+## 🍓 Raspberry Pi Zero Thin-Client LAN Setup
+
+To control Gemma-Bot from a Raspberry Pi Zero (or any other host on your LAN) while Webots/the controller runs on your workstation:
+
+1. **Generate a shared token** (never commit it; keep it in `.env` or shell environment):
+   ```bash
+   export GEMMA_BOT_TOKEN="$(python3 -c 'import secrets; print(secrets.token_urlsafe(32))')"
+   ```
+2. **On the host running the controller**, bind all interfaces with the token set (the server refuses to bind `0.0.0.0` without `GEMMA_BOT_TOKEN`):
+   ```bash
+   export GEMMA_BOT_HOST=0.0.0.0
+   export GEMMA_BOT_PORT=8765
+   export GEMMA_BOT_TOKEN="<your-token>"
+   ```
+   Restrict port `8765` in your host firewall to your local LAN subnet.
+3. **On the Raspberry Pi Zero thin client**, point the client or bridge to the host's LAN IP and pass the same token:
+   ```bash
+   export GEMMA_BOT_URL="http://<host-lan-ip>:8765"
+   export GEMMA_BOT_TOKEN="<your-token>"
+   python3 ai_assistant.py "nod yes and smile"
+   ```
+   Direct `curl` requests must include `-H "X-Bot-Token: $GEMMA_BOT_TOKEN"`. Oversized payloads (> `GEMMA_MAX_BODY_BYTES`, default 16 KB) return `413`, invalid JSON/types return `400`, and missing/invalid tokens return `401`.
 
 ---
 
