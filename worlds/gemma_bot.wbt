@@ -42,6 +42,7 @@ SolidBox {
 Robot {
   translation 0 0 0
   name "Gemma-Bot"
+  supervisor TRUE
   children [
     # Static Grounded Base (Standing vertically along Z from 0 to 0.07)
     DEF BASE_SHAPE Pose {
@@ -161,12 +162,12 @@ Robot {
                   children [
                     Shape {
                       appearance PBRAppearance {
-                        baseColor 0.04 0.04 0.05
-                        roughness 0.1
-                        metalness 0.2
+                        baseColor 0.02 0.02 0.02
+                        roughness 0.2
+                        metalness 0.1
                       }
                       geometry Box {
-                        size 0.088 0.003 0.065
+                        size 0.090 0.003 0.068
                       }
                     }
                   ]
@@ -178,13 +179,14 @@ Robot {
                   children [
                     Shape {
                       appearance PBRAppearance {
+                        baseColor 1 1 1
                         baseColorMap ImageTexture {
                           filtering 0
                         }
-                        roughness 0.1
+                        roughness 0.2
                         metalness 0.0
-                        emissiveColor 1 1 1
-                        emissiveIntensity 1.0
+                        emissiveColor 0 0 0
+                        emissiveIntensity 0.0
                       }
                       geometry IndexedFaceSet {
                         coord Coordinate {

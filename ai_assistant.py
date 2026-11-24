@@ -71,6 +71,26 @@ def parse_natural_language_intent(prompt):
     elif "look at me" in p or "center" in p or "forward" in p:
         action["gaze"] = "center"
 
+    # 2. Screen Color & Theme
+    if any(w in p for w in ["green screen", "green eye", "matrix screen", "matrix theme", "emerald"]):
+        action["screen_color"] = "GREEN"
+        action["speech"] = "Switching screen to Matrix Emerald!"
+    elif any(w in p for w in ["amber screen", "amber eye", "yellow screen", "orange screen", "gold screen"]):
+        action["screen_color"] = "AMBER"
+        action["speech"] = "Switching screen to Retro Amber!"
+    elif any(w in p for w in ["cyan screen", "cyan eye", "electric screen", "teal screen"]):
+        action["screen_color"] = "CYAN"
+        action["speech"] = "Switching screen to Electric Cyan!"
+    elif any(w in p for w in ["purple screen", "purple eye", "violet screen"]):
+        action["screen_color"] = "PURPLE"
+        action["speech"] = "Switching screen to Cyberpunk Violet!"
+    elif any(w in p for w in ["blue screen", "blue eye"]):
+        action["screen_color"] = "BLUE"
+        action["speech"] = "Switching screen to Neon Blue!"
+    elif any(w in p for w in ["white screen", "white eye"]):
+        action["screen_color"] = "WHITE"
+        action["speech"] = "Switching screen to High-Contrast White!"
+
     # 2. Specific Physical Gestures
     if any(w in p for w in ["curious", "tilt head", "inquisitive"]):
         action["gesture"] = "curious"

@@ -20,19 +20,74 @@ import http.server
 import subprocess
 import os
 import sys
-from controller import Robot, Keyboard
+from controller import Robot, Keyboard, Supervisor
 
 # Thread-safe queue for incoming AI commands
 COMMAND_QUEUE = queue.Queue()
 ROBOT_STATE = {
     "mood": "NEUTRAL",
     "gesture": None,
+    "screen_theme": "CYAN",
+    "screen_color": "#00F0FF",
     "yaw": 0.0,
     "pitch": 0.0,
     "gaze": [0.0, 0.0],
     "is_speaking": False,
     "speech_text": ""
 }
+
+# High-contrast OLED Screen Color Themes
+SCREEN_THEMES = {
+    "CYAN": {
+        "name": "Electric Cyan",
+        "bg_color": 0x000000,
+        "eye_color": 0x00F0FF,
+        "eye_dim": 0x007799,
+        "mouth_color": 0x00D0FF,
+        "sunglass_frame": 0x00F0FF,
+    },
+    "GREEN": {
+        "name": "Matrix Emerald",
+        "bg_color": 0x000000,
+        "eye_color": 0x00FF66,
+        "eye_dim": 0x008833,
+        "mouth_color": 0x33FF88,
+        "sunglass_frame": 0x00FF66,
+    },
+    "AMBER": {
+        "name": "Retro Amber",
+        "bg_color": 0x000000,
+        "eye_color": 0xFFAA00,
+        "eye_dim": 0x996600,
+        "mouth_color": 0xFFCC33,
+        "sunglass_frame": 0xFFAA00,
+    },
+    "BLUE": {
+        "name": "Neon Blue",
+        "bg_color": 0x000000,
+        "eye_color": 0x2979FF,
+        "eye_dim": 0x1545A5,
+        "mouth_color": 0x5393FF,
+        "sunglass_frame": 0x2979FF,
+    },
+    "PURPLE": {
+        "name": "Cyberpunk Violet",
+        "bg_color": 0x000000,
+        "eye_color": 0xD500F9,
+        "eye_dim": 0x7A008F,
+        "mouth_color": 0xE040FB,
+        "sunglass_frame": 0xD500F9,
+    },
+    "WHITE": {
+        "name": "High Contrast White",
+        "bg_color": 0x000000,
+        "eye_color": 0xFFFFFF,
+        "eye_dim": 0x777777,
+        "mouth_color": 0xCCCCCC,
+        "sunglass_frame": 0xFFFFFF,
+    }
+}
+THEME_KEYS = list(SCREEN_THEMES.keys())
 
 # Supported Emoji and Mood Mappings
 EMOJI_MOOD_MAP = {
@@ -162,7 +217,7 @@ def start_command_server(port=8765):
 
 class GemmaBotCompanion:
     def __init__(self):
-        self.robot = Robot()
+        self.robot = Supervisor()
         self.timestep = int(self.robot.getBasicTimeStep())
         
         # Hardware devices
@@ -200,15 +255,18 @@ class GemmaBotCompanion:
         # Display resolution & high-contrast colors
         self.disp_w = 128
         self.disp_h = 64
-        self.bg_color = 0x000000        # True OLED black
-        self.eye_color = 0x00E5FF       # Electric Cyan / OLED Blue
-        self.eye_dim = 0x008899         # Secondary glow / dimming
-        self.mouth_color = 0x00BBDD
+        
+        self.current_theme = "CYAN"
+        theme = SCREEN_THEMES[self.current_theme]
+        self.bg_color = theme["bg_color"]           # True OLED black (no white blowout)
+        self.eye_color = theme["eye_color"]         # High-contrast bright neon
+        self.eye_dim = theme["eye_dim"]             # Secondary glow
+        self.mouth_color = theme["mouth_color"]
+        self.sunglass_frame = theme["sunglass_frame"]
         self.accent_pink = 0xFF4488     # Love / Hearts / Tongue
         self.accent_yellow = 0xFFDD00   # Star Eyes / Sparkle
         self.tear_blue = 0x44AAFF       # Crying Tears
         self.white = 0xFFFFFF           # Specular highlights & reflections
-        self.sunglass_frame = 0x00E5FF  # Frame accent for Cool glasses
         
         # Eye baseline geometry
         self.left_cx = 38
@@ -535,6 +593,31 @@ class GemmaBotCompanion:
             self.is_blinking = True
             self.blink_progress = 0.0
 
+    def set_screen_theme(self, theme):
+        """Sets the active OLED screen color theme."""
+        if not theme:
+            return
+        t = str(theme).upper().strip()
+        if t in SCREEN_THEMES:
+            cfg = SCREEN_THEMES[t]
+            self.current_theme = t
+            self.bg_color = cfg["bg_color"]
+            self.eye_color = cfg["eye_color"]
+            self.eye_dim = cfg["eye_dim"]
+            self.mouth_color = cfg["mouth_color"]
+            self.sunglass_frame = cfg["sunglass_frame"]
+            print(f"[Screen Theme] Switched to {cfg['name']} (Color: #{self.eye_color:06X})")
+            self.render_face()
+
+    def cycle_screen_theme(self):
+        """Cycles through available screen color themes."""
+        try:
+            curr_idx = THEME_KEYS.index(self.current_theme)
+        except ValueError:
+            curr_idx = 0
+        next_theme = THEME_KEYS[(curr_idx + 1) % len(THEME_KEYS)]
+        self.set_screen_theme(next_theme)
+
     def trigger_gesture(self, gesture_name):
         """Triggers a named physical head gesture with trajectory dynamics."""
         name = gesture_name.lower().strip()
@@ -666,7 +749,12 @@ class GemmaBotCompanion:
                     play_audio = bool(cmd.get("audio", True))
                     self.trigger_speech(text_str, play_audio=play_audio)
 
-                print(f"[AI Command Executed] Mood={self.mood}, Gesture={cmd.get('gesture')}, State={cmd.get('state')}")
+                # 6. Screen Color Theme
+                if "screen_color" in cmd or "theme" in cmd or "color" in cmd:
+                    col_val = cmd.get("screen_color") or cmd.get("theme") or cmd.get("color")
+                    self.set_screen_theme(col_val)
+
+                print(f"[AI Command Executed] Mood={self.mood}, Gesture={cmd.get('gesture')}, Theme={self.current_theme}")
             except Exception as e:
                 print(f"[AI Command Error]: {e}")
 
@@ -900,6 +988,8 @@ class GemmaBotCompanion:
         # Update global state for HTTP reporting
         ROBOT_STATE["mood"] = self.mood
         ROBOT_STATE["gesture"] = self.active_gesture
+        ROBOT_STATE["screen_theme"] = self.current_theme
+        ROBOT_STATE["screen_color"] = f"#{self.eye_color:06X}"
         ROBOT_STATE["yaw"] = round(self.cur_yaw, 3)
         ROBOT_STATE["pitch"] = round(self.cur_pitch, 3)
         ROBOT_STATE["gaze"] = [round(self.gaze_x, 2), round(self.gaze_y, 2)]
@@ -1007,6 +1097,8 @@ class GemmaBotCompanion:
             elif key in (ord('Q'), ord('q')):
                 self.trigger_gesture("peek_a_boo")
                 print("Gesture -> PEEK-A-BOO")
+            elif key in (ord('X'), ord('x')):
+                self.cycle_screen_theme()
             elif key == ord('['):
                 self.trigger_gesture("tilt_left")
                 print("Gesture -> TILT LEFT")
