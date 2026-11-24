@@ -15,7 +15,9 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BOT_DIR="$SCRIPT_DIR"
 TALK_DIR="${GEMMA_TALK_DIR:-$HOME/Documents/gemma-talk}"
-WEBOTS_APP="/Applications/Webots.app/Contents/MacOS/webots"
+WEBOTS_APP="${WEBOTS_APP:-/Applications/Webots.app/Contents/MacOS/webots}"
+LOG_DIR="${GEMMA_LOG_DIR:-$BOT_DIR/logs}"
+mkdir -p "$LOG_DIR"
 
 # Color styles
 BOLD="\033[1m"
@@ -51,17 +53,35 @@ fi
 
 # Track spawned process PIDs for clean exit
 PIDS=()
+CLEANED_UP=0
+
+kill_tree() {
+    local pid="$1"
+    local child
+    if command -v pgrep > /dev/null 2>&1; then
+        for child in $(pgrep -P "$pid" 2>/dev/null || true); do
+            kill_tree "$child"
+        done
+    fi
+    if kill -0 "$pid" > /dev/null 2>&1; then
+        kill "$pid" > /dev/null 2>&1 || true
+    fi
+}
 
 cleanup() {
+    if [ "$CLEANED_UP" -eq 1 ]; then
+        return 0
+    fi
+    CLEANED_UP=1
     echo -e "\n${BOLD}${YELLOW}🛑 Shutting down all Gemma-Bot and Gemma-Talk services...${NC}"
     for pid in "${PIDS[@]}"; do
-        if kill -0 "$pid" > /dev/null 2>&1; then
-            kill "$pid" > /dev/null 2>&1 || true
-        fi
+        kill_tree "$pid"
     done
     echo -e "${GREEN}✓ All services stopped cleanly.${NC}"
 }
-trap cleanup SIGINT SIGTERM EXIT
+trap cleanup EXIT
+trap 'cleanup; exit 130' SIGINT
+trap 'cleanup; exit 143' SIGTERM
 
 # ------------------------------------------------------------------------------
 # 1. Check & Launch Ollama
@@ -134,10 +154,24 @@ else
 fi
 
 # ------------------------------------------------------------------------------
-# 4. Synchronize Voice Pipeline with Robot Body
+# 4. Launch Gemma-Talk to Gemma-Bot Bridge
 # ------------------------------------------------------------------------------
-echo -e "\n${BOLD}[4/5] Synchronizing Voice Pipeline with Robot Body...${NC}"
-echo -e "${GREEN}✓ Real-time direct pipeline active (moods, lip-sync, and barge-in)${NC}"
+echo -e "\n${BOLD}[4/5] Launching Gemma-Talk <-> Gemma-Bot Bridge...${NC}"
+BRIDGE_LOG="$LOG_DIR/gemma_talk_bridge.log"
+"$PYTHON_BIN" "$BOT_DIR/gemma_talk_bridge.py" > "$BRIDGE_LOG" 2>&1 &
+BRIDGE_PID=$!
+PIDS+=("$BRIDGE_PID")
+
+sleep 0.5
+if ! kill -0 "$BRIDGE_PID" > /dev/null 2>&1; then
+    echo -e "${RED}❌ Error: Gemma-Talk bridge (gemma_talk_bridge.py) died on startup!${NC}"
+    if [ -s "$BRIDGE_LOG" ]; then
+        echo -e "${YELLOW}--- Bridge log ($BRIDGE_LOG) ---${NC}"
+        tail -n 20 "$BRIDGE_LOG"
+    fi
+    exit 1
+fi
+echo -e "${GREEN}✓ Gemma-Talk bridge active (PID $BRIDGE_PID, log: $BRIDGE_LOG)${NC}"
 
 # ------------------------------------------------------------------------------
 # 5. Launch Gemma-Talk Web UI & Open Browser

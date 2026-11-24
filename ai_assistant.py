@@ -20,6 +20,7 @@ Usage:
 
 import sys
 import os
+import re
 import json
 import urllib.request
 import urllib.error
@@ -49,169 +50,115 @@ def get_robot_status():
     except Exception:
         return None
 
+def _matches_keyword(text: str, keyword: str) -> bool:
+    """Match word/phrase keywords on word boundaries; emojis match directly."""
+    if not keyword:
+        return False
+    is_word_kw = (keyword[0].isalnum() or keyword[0] == "_") and (keyword[-1].isalnum() or keyword[-1] == "_")
+    if not is_word_kw:
+        return keyword in text
+    parts = keyword.split()
+    pattern = r"\b" + r"[\s-]+".join(re.escape(part) for part in parts) + r"\b"
+    return re.search(pattern, text, flags=re.IGNORECASE) is not None
+
+
+def _match_first_rule(text: str, rules):
+    """Evaluate multi-word phrases before single words and return the winning rule payload."""
+    candidates = []
+    for keywords, payload in rules:
+        for kw in keywords:
+            candidates.append((len(kw.split()), len(kw), kw, payload))
+    candidates.sort(key=lambda item: (item[0], item[1]), reverse=True)
+    for _, _, kw, payload in candidates:
+        if _matches_keyword(text, kw):
+            return payload
+    return None
+
+
+GAZE_RULES = [
+    (["look left", "turn left"], {"gaze": "left"}),
+    (["look right", "turn right"], {"gaze": "right"}),
+    (["look up"], {"gaze": "up"}),
+    (["look down"], {"gaze": "down"}),
+    (["look at me", "center", "forward"], {"gaze": "center"}),
+]
+
+SCREEN_COLOR_RULES = [
+    (["green screen", "green eye", "green eyes", "matrix screen", "matrix theme", "emerald"],
+     {"screen_color": "GREEN", "speech": "Switching screen to Matrix Emerald!"}),
+    (["amber screen", "amber eye", "amber eyes", "yellow screen", "orange screen", "gold screen"],
+     {"screen_color": "AMBER", "speech": "Switching screen to Retro Amber!"}),
+    (["cyan screen", "cyan eye", "cyan eyes", "electric screen", "teal screen"],
+     {"screen_color": "CYAN", "speech": "Switching screen to Electric Cyan!"}),
+    (["purple screen", "purple eye", "purple eyes", "violet screen"],
+     {"screen_color": "PURPLE", "speech": "Switching screen to Cyberpunk Violet!"}),
+    (["blue screen", "blue eye", "blue eyes"],
+     {"screen_color": "BLUE", "speech": "Switching screen to Neon Blue!"}),
+    (["white screen", "white eye", "white eyes"],
+     {"screen_color": "WHITE", "speech": "Switching screen to High-Contrast White!"}),
+]
+
+GESTURE_RULES = [
+    (["curious", "tilt head", "inquisitive"], {"gesture": "curious", "mood": "THINKING", "speech": "Hmm, interesting!"}),
+    (["perk up", "perk_up", "perk", "attentive", "alert"], {"gesture": "perk_up", "mood": "SURPRISED", "speech": "I'm listening!"}),
+    (["droop", "slump"], {"gesture": "droop", "mood": "SLEEPY", "speech": "So sleepy..."}),
+    (["tilt left", "lean left", "tilt_left"], {"gesture": "tilt_left"}),
+    (["tilt right", "lean right", "tilt_right"], {"gesture": "tilt_right"}),
+    (["bounce", "hop", "jump"], {"gesture": "bounce", "mood": "STAR_EYES", "speech": "Boing! Boing!"}),
+    (["groove", "dance", "boogie"], {"gesture": "groove", "mood": "COOL", "speech": "Grooving to the beat!"}),
+    (["shiver", "tremble", "quiver", "cold", "nervous"], {"gesture": "shiver", "mood": "CRYING", "speech": "Brrr... so cold!"}),
+    (["scan", "look around", "search", "survey"], {"gesture": "scan", "speech": "Scanning the surroundings..."}),
+    (["bow", "respect", "curtsy"], {"gesture": "bow", "speech": "At your service!"}),
+    (["cheer", "celebrate", "hooray", "hurray"], {"gesture": "cheer", "mood": "STAR_EYES", "speech": "Hooray! Congratulations!"}),
+    (["yawn"], {"gesture": "yawn", "mood": "SLEEPY", "speech": "Yaaawn..."}),
+    (["shy", "bashful", "blush"], {"gesture": "shy", "mood": "LOVE", "speech": "Aw, thank you..."}),
+    (["peek a boo", "peekaboo", "peek_a_boo", "hide and seek"], {"gesture": "peek_a_boo", "mood": "SURPRISED", "speech": "Peek-a-boo! I see you!"}),
+    (["spin", "swirl", "orbit", "dizzy spin", "dizzy_spin"], {"gesture": "dizzy_spin", "mood": "DIZZY", "speech": "Round and round we go!"}),
+    (["confused", "puzzled"], {"gesture": "confused", "mood": "THINKING", "speech": "I'm a little confused..."}),
+    (["nod", "yes", "agree"], {"gesture": "nod", "mood": "HAPPY", "speech": "Yes, absolutely!"}),
+    (["shake", "no", "disagree"], {"gesture": "shake", "speech": "No, I don't think so."}),
+    (["wiggle", "shimmy"], {"gesture": "wiggle", "mood": "HAPPY", "speech": "Wiggle wiggle!"}),
+]
+
+MOOD_RULES = [
+    (["cool", "sunglasses", "shades", "😎"], {"mood": "COOL", "speech": "Stay cool!"}),
+    (["star", "excited", "sparkle", "🤩", "✨"], {"mood": "STAR_EYES", "speech": "Amazing!"}),
+    (["plead", "puppy", "beg", "please", "🥺"], {"mood": "PLEADING", "speech": "Pretty please?"}),
+    (["cry", "sad", "tear", "sob", "😭", "😢"], {"mood": "CRYING", "speech": "Sniff... I am sad."}),
+    (["wink", "😉", "flirt"], {"mood": "WINK", "speech": "Wink wink!"}),
+    (["tongue", "silly", "playful", "😋", "😜"], {"mood": "TONGUE", "speech": "Blep!"}),
+    (["love", "heart", "cute", "kiss", "adore", "😍", "❤️", "🥰"], {"mood": "LOVE", "speech": "I love you!"}),
+    (["dizzy", "ko", "😵"], {"mood": "DIZZY", "speech": "Whoa, my head is spinning!"}),
+    (["smirk", "sly", "mischief", "😏"], {"mood": "SMIRK", "speech": "Heh, you know it."}),
+    (["happy", "smile", "laugh", "pet", "😀", "😊"], {"mood": "HAPPY", "speech": "Hehe, happy to be here!"}),
+    (["surprised", "wow", "omg", "shocked", "😮", "😲"], {"mood": "SURPRISED", "speech": "Whoa!"}),
+    (["sleep", "tired", "goodnight", "nap", "😴"], {"mood": "SLEEPY", "speech": "Goodnight... Zzz"}),
+    (["angry", "mad", "grumpy", "furious", "😡"], {"mood": "ANGRY", "speech": "Hmph!"}),
+    (["think", "ponder", "calculate", "why", "🤔"], {"mood": "THINKING", "speech": "Hmm, let me think..."}),
+    (["neutral", "calm", "😐"], {"mood": "NEUTRAL"}),
+    (["hello", "hi", "hey"], {"mood": "HAPPY", "gesture": "nod", "speech": "Hello! I am Gemma-Bot!"}),
+]
+
+
 def parse_natural_language_intent(prompt):
     """
     Translates natural language instructions into structured Gemma-Bot commands.
-    Supports gestures, moods, gaze direction, and companion speech.
+    Uses word-boundary matching with multi-word phrases taking precedence over single words.
     """
     p = prompt.lower().strip()
     action = {
         "thought": prompt
     }
 
-    # 1. Gaze & Direction
-    if "look left" in p or "turn left" in p:
-        action["gaze"] = "left"
-    elif "look right" in p or "turn right" in p:
-        action["gaze"] = "right"
-    elif "look up" in p:
-        action["gaze"] = "up"
-    elif "look down" in p:
-        action["gaze"] = "down"
-    elif "look at me" in p or "center" in p or "forward" in p:
-        action["gaze"] = "center"
+    for rules in (GAZE_RULES, SCREEN_COLOR_RULES, GESTURE_RULES):
+        matched = _match_first_rule(p, rules)
+        if matched:
+            action.update(matched)
 
-    # 2. Screen Color & Theme
-    if any(w in p for w in ["green screen", "green eye", "matrix screen", "matrix theme", "emerald"]):
-        action["screen_color"] = "GREEN"
-        action["speech"] = "Switching screen to Matrix Emerald!"
-    elif any(w in p for w in ["amber screen", "amber eye", "yellow screen", "orange screen", "gold screen"]):
-        action["screen_color"] = "AMBER"
-        action["speech"] = "Switching screen to Retro Amber!"
-    elif any(w in p for w in ["cyan screen", "cyan eye", "electric screen", "teal screen"]):
-        action["screen_color"] = "CYAN"
-        action["speech"] = "Switching screen to Electric Cyan!"
-    elif any(w in p for w in ["purple screen", "purple eye", "violet screen"]):
-        action["screen_color"] = "PURPLE"
-        action["speech"] = "Switching screen to Cyberpunk Violet!"
-    elif any(w in p for w in ["blue screen", "blue eye"]):
-        action["screen_color"] = "BLUE"
-        action["speech"] = "Switching screen to Neon Blue!"
-    elif any(w in p for w in ["white screen", "white eye"]):
-        action["screen_color"] = "WHITE"
-        action["speech"] = "Switching screen to High-Contrast White!"
-
-    # 2. Specific Physical Gestures
-    if any(w in p for w in ["curious", "tilt head", "inquisitive"]):
-        action["gesture"] = "curious"
-        action["mood"] = "THINKING"
-        action["speech"] = "Hmm, interesting!"
-    elif any(w in p for w in ["perk up", "perk_up", "perk", "attentive", "alert"]):
-        action["gesture"] = "perk_up"
-        action["mood"] = "SURPRISED"
-        action["speech"] = "I'm listening!"
-    elif any(w in p for w in ["droop", "slump"]):
-        action["gesture"] = "droop"
-        action["mood"] = "SLEEPY"
-        action["speech"] = "So sleepy..."
-    elif any(w in p for w in ["tilt left", "lean left"]):
-        action["gesture"] = "tilt_left"
-    elif any(w in p for w in ["tilt right", "lean right"]):
-        action["gesture"] = "tilt_right"
-    elif any(w in p for w in ["bounce", "hop", "jump"]):
-        action["gesture"] = "bounce"
-        action["mood"] = "STAR_EYES"
-        action["speech"] = "Boing! Boing!"
-    elif any(w in p for w in ["groove", "dance", "boogie"]):
-        action["gesture"] = "groove"
-        action["mood"] = "COOL"
-        action["speech"] = "Grooving to the beat!"
-    elif any(w in p for w in ["shiver", "tremble", "quiver", "cold", "nervous"]):
-        action["gesture"] = "shiver"
-        action["mood"] = "CRYING"
-        action["speech"] = "Brrr... so cold!"
-    elif any(w in p for w in ["scan", "look around", "search", "survey"]):
-        action["gesture"] = "scan"
-        action["speech"] = "Scanning the surroundings..."
-    elif any(w in p for w in ["bow", "respect", "curtsy"]):
-        action["gesture"] = "bow"
-        action["speech"] = "At your service!"
-    elif any(w in p for w in ["cheer", "celebrate", "hooray", "hurray"]):
-        action["gesture"] = "cheer"
-        action["mood"] = "STAR_EYES"
-        action["speech"] = "Hooray! Congratulations!"
-    elif any(w in p for w in ["yawn"]):
-        action["gesture"] = "yawn"
-        action["mood"] = "SLEEPY"
-        action["speech"] = "Yaaawn..."
-    elif any(w in p for w in ["shy", "bashful", "blush"]):
-        action["gesture"] = "shy"
-        action["mood"] = "LOVE"
-        action["speech"] = "Aw, thank you..."
-    elif any(w in p for w in ["peek a boo", "peekaboo", "hide and seek"]):
-        action["gesture"] = "peek_a_boo"
-        action["mood"] = "SURPRISED"
-        action["speech"] = "Peek-a-boo! I see you!"
-    elif any(w in p for w in ["spin", "swirl", "orbit", "dizzy spin"]):
-        action["gesture"] = "dizzy_spin"
-        action["mood"] = "DIZZY"
-        action["speech"] = "Round and round we go!"
-    elif any(w in p for w in ["confused", "puzzled"]):
-        action["gesture"] = "confused"
-        action["mood"] = "THINKING"
-        action["speech"] = "I'm a little confused..."
-    elif any(w in p for w in ["nod", "yes", "agree"]):
-        action["gesture"] = "nod"
-        action["mood"] = "HAPPY"
-        action["speech"] = "Yes, absolutely!"
-    elif any(w in p for w in ["shake", "no", "disagree"]):
-        action["gesture"] = "shake"
-        action["speech"] = "No, I don't think so."
-    elif any(w in p for w in ["wiggle", "shimmy"]):
-        action["gesture"] = "wiggle"
-        action["mood"] = "HAPPY"
-        action["speech"] = "Wiggle wiggle!"
-
-    # 3. Specific Moods & Emojis (if not already assigned by gesture)
     if "mood" not in action:
-        if any(w in p for w in ["cool", "sunglasses", "shades", "😎"]):
-            action["mood"] = "COOL"
-            action["speech"] = "Stay cool!"
-        elif any(w in p for w in ["star", "excited", "sparkle", "🤩", "✨"]):
-            action["mood"] = "STAR_EYES"
-            action["speech"] = "Amazing!"
-        elif any(w in p for w in ["plead", "puppy", "beg", "please", "🥺"]):
-            action["mood"] = "PLEADING"
-            action["speech"] = "Pretty please?"
-        elif any(w in p for w in ["cry", "sad", "tear", "sob", "😭", "😢"]):
-            action["mood"] = "CRYING"
-            action["speech"] = "Sniff... I am sad."
-        elif any(w in p for w in ["wink", "😉", "flirt"]):
-            action["mood"] = "WINK"
-            action["speech"] = "Wink wink!"
-        elif any(w in p for w in ["tongue", "silly", "playful", "😋", "😜"]):
-            action["mood"] = "TONGUE"
-            action["speech"] = "Blep!"
-        elif any(w in p for w in ["love", "heart", "cute", "kiss", "adore", "😍", "❤️", "🥰"]):
-            action["mood"] = "LOVE"
-            action["speech"] = "I love you!"
-        elif any(w in p for w in ["dizzy", "ko", "😵"]):
-            action["mood"] = "DIZZY"
-            action["speech"] = "Whoa, my head is spinning!"
-        elif any(w in p for w in ["smirk", "sly", "mischief", "😏"]):
-            action["mood"] = "SMIRK"
-            action["speech"] = "Heh, you know it."
-        elif any(w in p for w in ["happy", "smile", "laugh", "pet", "😀", "😊"]):
-            action["mood"] = "HAPPY"
-            action["speech"] = "Hehe, happy to be here!"
-        elif any(w in p for w in ["surprised", "wow", "omg", "shocked", "😮", "😲"]):
-            action["mood"] = "SURPRISED"
-            action["speech"] = "Whoa!"
-        elif any(w in p for w in ["sleep", "tired", "goodnight", "nap", "😴"]):
-            action["mood"] = "SLEEPY"
-            action["speech"] = "Goodnight... Zzz"
-        elif any(w in p for w in ["angry", "mad", "grumpy", "furious", "😡"]):
-            action["mood"] = "ANGRY"
-            action["speech"] = "Hmph!"
-        elif any(w in p for w in ["think", "ponder", "calculate", "why", "🤔"]):
-            action["mood"] = "THINKING"
-            action["speech"] = "Hmm, let me think..."
-        elif any(w in p for w in ["neutral", "calm", "😐"]):
-            action["mood"] = "NEUTRAL"
-        elif any(w in p for w in ["hello", "hi", "hey"]):
-            action["mood"] = "HAPPY"
-            action["gesture"] = "nod"
-            action["speech"] = "Hello! I am Gemma-Bot!"
+        matched_mood = _match_first_rule(p, MOOD_RULES)
+        if matched_mood:
+            action.update(matched_mood)
 
     return action
 

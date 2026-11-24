@@ -1,0 +1,14 @@
+# Changelog
+
+All notable changes to **Gemma-Bot** are documented in this file by phase.
+
+## Phase 1 — Bug Fixes (`fix/phase-1-bugs`)
+- **`start_all.sh`**: Step 4 now actually launches `gemma_talk_bridge.py` in the background with file logging (`logs/gemma_talk_bridge.log`), PID tracking, recursive child process cleanup on `SIGINT`/`SIGTERM`/`EXIT`, and a startup liveness check that fails loudly if the bridge crashes.
+- **`ai_assistant.py`**: Replaced substring `in` matching in `parse_natural_language_intent()` with `\b` word-boundary regex matching (while preserving direct emoji matching) and multi-word phrase precedence over single words.
+- **`gemma_talk_bridge.py`**: Moved `send_bot_command()` off the asyncio event loop via `asyncio.to_thread` (`send_bot_command_async`) and non-blocking task dispatch so slow/unreachable Webots requests no longer block barge-in `flush` handling. Added structured `logging`, `WebotsHealth` tracking with exponential backoff, and periodic `/status` health checks.
+- **`controllers/gemma_bot_controller/gemma_bot_controller.py`**:
+  - Removed duplicate `idle_timer += 1` increments inside `NEUTRAL`, `HAPPY`, and `SLEEPY` idle branches so `idle_timer` advances once per tick.
+  - Standardized `"CONFUSED"` mood mapping to `"THINKING"` (matching `GESTURE_DEFAULT_MOOD["confused"]` and `ai_assistant.py`).
+  - Changed head touch sensor handling to rising-edge detection so petting while already `HAPPY` re-triggers `wiggle` and refreshes `idle_timer`.
+  - Logged warnings and skipped activation when `trigger_gesture()` receives an unknown gesture name.
+- **Tests**: Added `tests/` (`pytest`) with regression tests for all Phase 1 fixes.

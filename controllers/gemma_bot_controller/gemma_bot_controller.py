@@ -17,10 +17,13 @@ import queue
 import threading
 import json
 import http.server
+import logging
 import subprocess
 import os
 import sys
 from controller import Robot, Keyboard, Supervisor
+
+logger = logging.getLogger("gemma_bot_controller")
 
 # Thread-safe queue for incoming AI commands
 COMMAND_QUEUE = queue.Queue()
@@ -109,10 +112,10 @@ EMOJI_MOOD_MAP = {
     "😴": "SLEEPY", "🥱": "SLEEPY", "💤": "SLEEPY", "SLEEPY": "SLEEPY", "TIRED": "SLEEPY", "SLEEP": "SLEEPY",
     # Angry / Mad
     "😡": "ANGRY", "😠": "ANGRY", "🤬": "ANGRY", "ANGRY": "ANGRY", "MAD": "ANGRY",
-    # Thinking / Ponder
-    "🤔": "THINKING", "🧐": "THINKING", "THINKING": "THINKING", "PONDER": "THINKING",
+    # Thinking / Ponder (consistent with GESTURE_DEFAULT_MOOD["confused"] = "THINKING")
+    "🤔": "THINKING", "🧐": "THINKING", "THINKING": "THINKING", "PONDER": "THINKING", "CONFUSED": "THINKING",
     # Dizzy / KO
-    "😵": "DIZZY", "😵‍💫": "DIZZY", "DIZZY": "DIZZY", "CONFUSED": "DIZZY", "KO": "DIZZY",
+    "😵": "DIZZY", "😵‍💫": "DIZZY", "DIZZY": "DIZZY", "KO": "DIZZY",
     # Star Eyes / Excited
     "🤩": "STAR_EYES", "✨": "STAR_EYES", "STAR_EYES": "STAR_EYES", "EXCITED": "STAR_EYES", "STAR": "STAR_EYES",
     # Tongue / Playful
@@ -216,7 +219,7 @@ def start_command_server(port=8765):
         return None
 
 class GemmaBotCompanion:
-    def __init__(self):
+    def __init__(self, start_server=True):
         self.robot = Supervisor()
         self.timestep = int(self.robot.getBasicTimeStep())
         
@@ -297,9 +300,10 @@ class GemmaBotCompanion:
         self.active_gesture = None
         self.gesture_frame = 0
         self.gesture_total_frames = 0
-        
+        self._was_touched = False
+
         # Start background HTTP AI command server
-        self.server = start_command_server(8765)
+        self.server = start_command_server(8765) if start_server else None
         
         # Render initial frame immediately
         self.render_face()
@@ -620,49 +624,54 @@ class GemmaBotCompanion:
 
     def trigger_gesture(self, gesture_name):
         """Triggers a named physical head gesture with trajectory dynamics."""
-        name = gesture_name.lower().strip()
+        name = str(gesture_name).lower().strip()
+        if name in ("nod", "yes"):
+            total_frames = 60
+        elif name in ("shake", "no", "shake_head"):
+            total_frames = 70
+        elif name in ("wiggle",):
+            total_frames = 80
+        elif name in ("curious", "tilt"):
+            total_frames = 75
+        elif name in ("tilt_left", "lean_left"):
+            total_frames = 55
+        elif name in ("tilt_right", "lean_right"):
+            total_frames = 55
+        elif name in ("perk_up", "alert"):
+            total_frames = 65
+        elif name in ("droop",):
+            total_frames = 85
+        elif name in ("bounce", "hop"):
+            total_frames = 50
+        elif name in ("groove", "dance"):
+            total_frames = 90
+        elif name in ("shiver", "tremble", "quiver"):
+            total_frames = 60
+        elif name in ("scan", "look_around", "search"):
+            total_frames = 100
+        elif name in ("confused", "ponder"):
+            total_frames = 80
+        elif name in ("bow", "respect"):
+            total_frames = 70
+        elif name in ("cheer", "celebrate"):
+            total_frames = 70
+        elif name in ("yawn",):
+            total_frames = 80
+        elif name in ("shy", "bashful"):
+            total_frames = 65
+        elif name in ("peek_a_boo", "hide"):
+            total_frames = 85
+        elif name in ("dizzy_spin", "swirl", "orbital"):
+            total_frames = 90
+        else:
+            logger.warning("Unknown gesture requested: %r", gesture_name)
+            print(f"[Gesture Warning] Unknown gesture: {gesture_name!r}")
+            return False
+
         self.active_gesture = name
         self.gesture_frame = 0
-        if name in ("nod", "yes"):
-            self.gesture_total_frames = 60
-        elif name in ("shake", "no", "shake_head"):
-            self.gesture_total_frames = 70
-        elif name in ("wiggle",):
-            self.gesture_total_frames = 80
-        elif name in ("curious", "tilt"):
-            self.gesture_total_frames = 75
-        elif name in ("tilt_left", "lean_left"):
-            self.gesture_total_frames = 55
-        elif name in ("tilt_right", "lean_right"):
-            self.gesture_total_frames = 55
-        elif name in ("perk_up", "alert"):
-            self.gesture_total_frames = 65
-        elif name in ("droop",):
-            self.gesture_total_frames = 85
-        elif name in ("bounce", "hop"):
-            self.gesture_total_frames = 50
-        elif name in ("groove", "dance"):
-            self.gesture_total_frames = 90
-        elif name in ("shiver", "tremble", "quiver"):
-            self.gesture_total_frames = 60
-        elif name in ("scan", "look_around", "search"):
-            self.gesture_total_frames = 100
-        elif name in ("confused", "ponder"):
-            self.gesture_total_frames = 80
-        elif name in ("bow", "respect"):
-            self.gesture_total_frames = 70
-        elif name in ("cheer", "celebrate"):
-            self.gesture_total_frames = 70
-        elif name in ("yawn",):
-            self.gesture_total_frames = 80
-        elif name in ("shy", "bashful"):
-            self.gesture_total_frames = 65
-        elif name in ("peek_a_boo", "hide"):
-            self.gesture_total_frames = 85
-        elif name in ("dizzy_spin", "swirl", "orbital"):
-            self.gesture_total_frames = 90
-        else:
-            self.gesture_total_frames = 50
+        self.gesture_total_frames = total_frames
+        return True
 
     def process_ai_commands(self):
         """Drains the AI command queue and executes actions."""
@@ -947,7 +956,6 @@ class GemmaBotCompanion:
 
         # 3. Autonomous Idle Life (when no gesture is active)
         elif self.mood == "NEUTRAL":
-            self.idle_timer += 1
             self.next_idle_action -= 1
             if self.next_idle_action <= 0:
                 choice = random.random()
@@ -968,11 +976,9 @@ class GemmaBotCompanion:
                     self.target_pitch = self.gaze_y * 0.2
                 self.next_idle_action = random.randint(100, 240)
         elif self.mood == "HAPPY" and not self.active_gesture:
-            self.idle_timer += 1
             self.target_yaw = math.sin(self.idle_timer * 0.2) * 0.15
             self.target_pitch = -0.12
         elif self.mood == "SLEEPY" and not self.active_gesture:
-            self.idle_timer += 1
             self.target_yaw = 0.0
             self.target_pitch = 0.32
             self.gaze_x = 0.0
@@ -1119,12 +1125,15 @@ class GemmaBotCompanion:
                 self.gaze_y = 0.8
             key = self.keyboard.getKey()
 
-        # Check physical capacitive head touch
-        if self.touch and self.touch.getValue() > 0.5:
-            if self.mood != "HAPPY":
-                self.mood = "HAPPY"
-                self.trigger_gesture("wiggle")
-                print("Head Touched! -> HAPPY")
+        # Check physical capacitive head touch (rising edge only)
+        is_touched = bool(self.touch and self.touch.getValue() > 0.5)
+        if is_touched and not self._was_touched:
+            self.mood = "HAPPY"
+            self.idle_timer = 0
+            self.trigger_gesture("wiggle")
+            self.trigger_blink()
+            print("Head Touched! -> HAPPY")
+        self._was_touched = is_touched
 
     def run(self):
         """Main simulation execution loop."""
