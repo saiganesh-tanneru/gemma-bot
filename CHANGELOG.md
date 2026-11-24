@@ -2,6 +2,13 @@
 
 All notable changes to **Gemma-Bot** are documented in this file by phase.
 
+## Phase 2 — Hygiene & Configuration (`chore/phase-2-hygiene`)
+- **Git & Packaging**: Untracked committed `__pycache__/gemma_talk_bridge.cpython-311.pyc`, updated `.gitignore` (`.env`, `.env.*` excluding `.env.example`, `.venv/`, `.pytest_cache/`, `logs/`, `*.pyc`), added pinned `requirements.txt` and `requirements-dev.txt`, and removed the runtime `pip install websockets` call from `gemma_talk_bridge.py`.
+- **License**: Added MIT `LICENSE` (with placeholder `[COPYRIGHT HOLDER]` pending owner confirmation).
+- **Centralized Config**: Added `config.py` (with `.env` support and env overrides for host, port, URLs, paths, timeouts, and auth token) and `.env.example`. Replaced all hardcoded `8765` ports and `/Users/` paths in `ai_assistant.py`, `gemma_talk_bridge.py`, `controllers/gemma_bot_controller/gemma_bot_controller.py`, `scripts/generate_readme_assets.py`, and `start_all.sh`.
+- **Note**: Sharing the real OLED renderer with `scripts/generate_readme_assets.py` depends on Phase 3's module extraction (`faces/`).
+- **Tests**: Added `tests/test_phase2_hygiene.py`.
+
 ## Phase 1 — Bug Fixes (`fix/phase-1-bugs`)
 - **`start_all.sh`**: Step 4 now actually launches `gemma_talk_bridge.py` in the background with file logging (`logs/gemma_talk_bridge.log`), PID tracking, recursive child process cleanup on `SIGINT`/`SIGTERM`/`EXIT`, and a startup liveness check that fails loudly if the bridge crashes.
 - **`ai_assistant.py`**: Replaced substring `in` matching in `parse_natural_language_intent()` with `\b` word-boundary regex matching (while preserving direct emoji matching) and multi-word phrase precedence over single words.

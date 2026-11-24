@@ -7,7 +7,15 @@ Generates high-contrast visual assets for Gemma-Bot README:
 
 import os
 import struct
+import sys
 import zlib
+from pathlib import Path
+
+_REPO_ROOT = str(Path(__file__).resolve().parents[1])
+if _REPO_ROOT not in sys.path:
+    sys.path.insert(0, _REPO_ROOT)
+
+import config
 
 # 5x7 Pixel Font for Labels
 FONT_5X7 = {
@@ -425,7 +433,7 @@ def generate_color_themes(out_path):
     print(f"Generated {out_path} ({grid_w}x{grid_h})")
 
 if __name__ == "__main__":
-    assets_dir = "/Users/saiganeshtanneru/Documents/GitHub/robots/gemma-bot/docs/assets"
+    assets_dir = str(config.ASSETS_DIR)
     os.makedirs(assets_dir, exist_ok=True)
     generate_expressions_grid(os.path.join(assets_dir, "expressions_grid.png"))
     generate_color_themes(os.path.join(assets_dir, "color_themes.png"))

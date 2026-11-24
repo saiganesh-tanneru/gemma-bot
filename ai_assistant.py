@@ -26,7 +26,9 @@ import urllib.request
 import urllib.error
 import argparse
 
-SERVER_URL = "http://127.0.0.1:8765"
+import config
+
+SERVER_URL = config.BOT_BASE_URL
 
 def send_command(cmd_dict):
     """Sends a JSON command dict to Gemma-Bot in Webots."""
@@ -34,7 +36,7 @@ def send_command(cmd_dict):
     data = json.dumps(cmd_dict).encode("utf-8")
     req = urllib.request.Request(url, data=data, headers={"Content-Type": "application/json"})
     try:
-        with urllib.request.urlopen(req, timeout=3) as resp:
+        with urllib.request.urlopen(req, timeout=config.CLI_COMMAND_TIMEOUT_SECONDS) as resp:
             return json.loads(resp.read().decode("utf-8"))
     except urllib.error.URLError as e:
         print(f"❌ Connection error: Could not reach Gemma-Bot at {SERVER_URL}.")
@@ -45,7 +47,7 @@ def get_robot_status():
     """Gets the current status of Gemma-Bot from Webots."""
     url = f"{SERVER_URL}/status"
     try:
-        with urllib.request.urlopen(url, timeout=2) as resp:
+        with urllib.request.urlopen(url, timeout=config.CLI_STATUS_TIMEOUT_SECONDS) as resp:
             return json.loads(resp.read().decode("utf-8"))
     except Exception:
         return None

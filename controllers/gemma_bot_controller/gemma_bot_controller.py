@@ -5,7 +5,7 @@ Features:
 - Dual-axis servo head motion (Yaw / Pan and Pitch / Tilt).
 - Expressive moods: Neutral, Happy, Surprised, Sleepy, Angry, Thinking, Love.
 - Gesture engine: Nod, Shake Head, Wiggle, Curious Tilt, Perk Up, Droop.
-- Embedded AI Command Server (HTTP REST on 127.0.0.1:8765):
+- Embedded AI Command Server (HTTP REST, configured via config.py):
   Allows external AI / LLMs (Gemini, scripts, chat interfaces) to control
   the robot's moods, gaze, gestures, and speech via simple JSON commands.
 - Interactive keyboard controls & autonomous companion behaviors.
@@ -21,7 +21,14 @@ import logging
 import subprocess
 import os
 import sys
+from pathlib import Path
 from controller import Robot, Keyboard, Supervisor
+
+_REPO_ROOT = str(Path(__file__).resolve().parents[2])
+if _REPO_ROOT not in sys.path:
+    sys.path.insert(0, _REPO_ROOT)
+
+import config
 
 logger = logging.getLogger("gemma_bot_controller")
 
@@ -207,15 +214,15 @@ class AICommandHandler(http.server.BaseHTTPRequestHandler):
             self.send_response(404)
             self.end_headers()
 
-def start_command_server(port=8765):
+def start_command_server(port=config.BOT_PORT, host=config.BOT_HOST):
     """Starts the background AI command server."""
     try:
-        server = http.server.HTTPServer(("127.0.0.1", port), AICommandHandler)
+        server = http.server.HTTPServer((host, port), AICommandHandler)
         t = threading.Thread(target=server.serve_forever, daemon=True)
         t.start()
         return server
     except Exception as e:
-        print(f"[AI Server] Warning: Could not bind port {port}: {e}")
+        print(f"[AI Server] Warning: Could not bind {host}:{port}: {e}")
         return None
 
 class GemmaBotCompanion:
@@ -303,14 +310,14 @@ class GemmaBotCompanion:
         self._was_touched = False
 
         # Start background HTTP AI command server
-        self.server = start_command_server(8765) if start_server else None
-        
+        self.server = start_command_server(config.BOT_PORT, config.BOT_HOST) if start_server else None
+
         # Render initial frame immediately
         self.render_face()
-        
+
         print("=" * 65)
         print("🤖 Gemma-Bot Desktop Companion Initialized with AI Integration!")
-        print("🌐 AI Command Server listening on: http://127.0.0.1:8765/command")
+        print(f"🌐 AI Command Server listening on: http://{config.BOT_HOST}:{config.BOT_PORT}/command")
         print("Controls:")
         print("  [1] Neutral       [2] Happy        [3] Surprised")
         print("  [4] Sleepy        [5] Angry        [6] Thinking")

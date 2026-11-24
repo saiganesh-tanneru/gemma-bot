@@ -13,7 +13,7 @@ robot behaviors and expressions:
 
 Usage:
   # 1. Start Gemma-Talk server in another terminal:
-  #    cd /Users/saiganeshtanneru/Documents/gemma-talk && ./start-server.sh
+  #    cd "$GEMMA_TALK_DIR" && ./start-server.sh
   #
   # 2. Run this bridge:
   #    python3 gemma_talk_bridge.py
@@ -30,13 +30,15 @@ import urllib.error
 from dataclasses import dataclass
 from typing import Optional
 
+import config
+
 logger = logging.getLogger("gemma_talk_bridge")
 
-# Gemma-Bot Webots AI server endpoint
-BOT_COMMAND_URL = "http://127.0.0.1:8765/command"
-BOT_STATUS_URL = "http://127.0.0.1:8765/status"
+# Gemma-Bot Webots AI server endpoints
+BOT_COMMAND_URL = config.BOT_COMMAND_URL
+BOT_STATUS_URL = config.BOT_STATUS_URL
 # Gemma-Talk backend WebSocket URL
-GEMMA_TALK_WS_URL = "ws://localhost:8000/ws"
+GEMMA_TALK_WS_URL = config.GEMMA_TALK_WS_URL
 
 
 @dataclass
@@ -89,7 +91,11 @@ class WebotsHealth:
         return (time.monotonic() if now is None else now) >= self.next_probe_at
 
 
-def send_bot_command(payload, health: Optional[WebotsHealth] = None, timeout: float = 1.5):
+def send_bot_command(
+    payload,
+    health: Optional[WebotsHealth] = None,
+    timeout: float = config.BRIDGE_TIMEOUT_SECONDS,
+):
     """Sends a state/action payload to Gemma-Bot in Webots."""
     try:
         data = json.dumps(payload).encode("utf-8")
@@ -112,12 +118,19 @@ def send_bot_command(payload, health: Optional[WebotsHealth] = None, timeout: fl
         return None
 
 
-async def send_bot_command_async(payload, health: Optional[WebotsHealth] = None, timeout: float = 1.5):
+async def send_bot_command_async(
+    payload,
+    health: Optional[WebotsHealth] = None,
+    timeout: float = config.BRIDGE_TIMEOUT_SECONDS,
+):
     """Non-blocking wrapper that executes the HTTP POST off the asyncio event loop."""
     return await asyncio.to_thread(send_bot_command, payload, health, timeout)
 
 
-def check_webots_health(health: WebotsHealth, timeout: float = 1.0) -> bool:
+def check_webots_health(
+    health: WebotsHealth,
+    timeout: float = config.BRIDGE_HEALTH_TIMEOUT_SECONDS,
+) -> bool:
     """Probes Webots /status endpoint and updates health state."""
     try:
         with urllib.request.urlopen(BOT_STATUS_URL, timeout=timeout) as resp:
@@ -129,7 +142,10 @@ def check_webots_health(health: WebotsHealth, timeout: float = 1.0) -> bool:
         return False
 
 
-async def health_monitor_loop(health: WebotsHealth, interval: float = 5.0):
+async def health_monitor_loop(
+    health: WebotsHealth,
+    interval: float = config.BRIDGE_HEALTH_INTERVAL_SECONDS,
+):
     """Periodically checks Webots reachability with backoff when unreachable."""
     while True:
         if health.should_probe():
@@ -186,11 +202,11 @@ async def connect_to_gemma_talk():
     """Connects to Gemma-Talk WebSocket and streams session states to Gemma-Bot."""
     try:
         import websockets
-    except ImportError:
-        print("Installing websockets library...")
-        import subprocess
-        subprocess.check_call([sys.executable, "-m", "pip", "install", "websockets"])
-        import websockets
+    except ImportError as exc:
+        raise ImportError(
+            "Missing dependency 'websockets'. Install project dependencies with: "
+            "pip install -r requirements.txt"
+        ) from exc
 
     print("=" * 65)
     print("🤖 Gemma-Talk <-> Gemma-Bot Bridge")
@@ -203,13 +219,13 @@ async def connect_to_gemma_talk():
     pending_tasks = set()
     health_task = asyncio.create_task(health_monitor_loop(health))
     sender_task = asyncio.create_task(command_sender_loop(command_queue, health))
-    retry_delay = 2
+    retry_delay = config.BRIDGE_WS_RETRY_BASE_SECONDS
     try:
         while True:
             try:
                 async with websockets.connect(GEMMA_TALK_WS_URL) as ws:
                     logger.info("Connected to Gemma-Talk server at %s", GEMMA_TALK_WS_URL)
-                    retry_delay = 2
+                    retry_delay = config.BRIDGE_WS_RETRY_BASE_SECONDS
                     _enqueue_command(
                         command_queue,
                         {
@@ -280,7 +296,7 @@ async def connect_to_gemma_talk():
             except Exception as exc:
                 logger.warning("Gemma-Talk server not connected (%s). Reconnecting in %ss...", exc, retry_delay)
                 await asyncio.sleep(retry_delay)
-                retry_delay = min(30, retry_delay * 2)
+                retry_delay = min(config.BRIDGE_WS_RETRY_MAX_SECONDS, retry_delay * 2)
     finally:
         health_task.cancel()
         sender_task.cancel()

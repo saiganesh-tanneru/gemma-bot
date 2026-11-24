@@ -14,9 +14,48 @@ set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BOT_DIR="$SCRIPT_DIR"
-TALK_DIR="${GEMMA_TALK_DIR:-$HOME/Documents/gemma-talk}"
-WEBOTS_APP="${WEBOTS_APP:-/Applications/Webots.app/Contents/MacOS/webots}"
-LOG_DIR="${GEMMA_LOG_DIR:-$BOT_DIR/logs}"
+
+# Load .env overrides if present without clobbering existing environment variables
+if [ -f "$BOT_DIR/.env" ]; then
+    while IFS='=' read -r k v; do
+        [[ -z "$k" || "$k" == \#* ]] && continue
+        k="${k%%[[:space:]]*}"
+        v="${v#\"}"; v="${v%\"}"; v="${v#\'}"; v="${v%\'}"
+        if [ -z "${!k+x}" ]; then
+            export "$k=$v"
+        fi
+    done < "$BOT_DIR/.env"
+fi
+
+# Determine python interpreter for config parsing and running the bridge
+if [ -x "$BOT_DIR/.venv/bin/python3" ]; then
+    CFG_PYTHON="$BOT_DIR/.venv/bin/python3"
+else
+    CFG_PYTHON="$(command -v python3)"
+fi
+
+if [ -n "${GEMMA_PYTHON_BIN:-}" ] && [ -x "$GEMMA_PYTHON_BIN" ]; then
+    PYTHON_BIN="$GEMMA_PYTHON_BIN"
+elif [ -f "${GEMMA_TALK_DIR:-$HOME/Documents/gemma-talk}/server/.venv/bin/python3" ]; then
+    PYTHON_BIN="${GEMMA_TALK_DIR:-$HOME/Documents/gemma-talk}/server/.venv/bin/python3"
+elif [ -f "$BOT_DIR/.venv/bin/python3" ]; then
+    PYTHON_BIN="$BOT_DIR/.venv/bin/python3"
+else
+    PYTHON_BIN="$CFG_PYTHON"
+fi
+
+_cfg() {
+    "$CFG_PYTHON" -c "import sys; sys.path.insert(0, '$BOT_DIR'); import config; print($1)"
+}
+
+TALK_DIR="${GEMMA_TALK_DIR:-$(_cfg 'str(config.GEMMA_TALK_DIR)')}"
+WEBOTS_APP="${WEBOTS_APP:-$(_cfg 'config.WEBOTS_APP')}"
+LOG_DIR="${GEMMA_LOG_DIR:-$(_cfg 'str(config.LOG_DIR)')}"
+BOT_HOST="$(_cfg 'config.BOT_HOST')"
+BOT_PORT="$(_cfg 'config.BOT_PORT')"
+BOT_STATUS_URL="$(_cfg 'config.BOT_STATUS_URL')"
+BOT_BASE_URL="$(_cfg 'config.BOT_BASE_URL')"
+WORLD_PATH="$(_cfg 'str(config.WORLD_PATH)')"
 mkdir -p "$LOG_DIR"
 
 # Color styles
@@ -42,13 +81,6 @@ fi
 if [ ! -x "$WEBOTS_APP" ]; then
     echo -e "${RED}❌ Error: Webots application not found at $WEBOTS_APP${NC}"
     exit 1
-fi
-
-# Determine python interpreter (prefer gemma-talk virtual environment with full dependencies)
-if [ -f "$TALK_DIR/server/.venv/bin/python3" ]; then
-    PYTHON_BIN="$TALK_DIR/server/.venv/bin/python3"
-else
-    PYTHON_BIN="$(which python3)"
 fi
 
 # Track spawned process PIDs for clean exit
@@ -114,22 +146,22 @@ fi
 # 2. Launch Webots Simulation
 # ------------------------------------------------------------------------------
 echo -e "\n${BOLD}[2/5] Launching Webots Simulation (Gemma-Bot)...${NC}"
-if curl -s http://127.0.0.1:8765/status > /dev/null 2>&1; then
+if curl -s "$BOT_STATUS_URL" > /dev/null 2>&1; then
     echo -e "${GREEN}✓ Gemma-Bot simulation is already running in Webots!${NC}"
 else
     echo "Starting Webots in real-time mode..."
-    "$WEBOTS_APP" --mode=realtime --batch "$BOT_DIR/worlds/gemma_bot.wbt" > /dev/null 2>&1 &
+    "$WEBOTS_APP" --mode=realtime --batch "$WORLD_PATH" > /dev/null 2>&1 &
     WEBOTS_PID=$!
     PIDS+=("$WEBOTS_PID")
 
     echo "Waiting for Gemma-Bot AI controller to initialize..."
     for i in {1..30}; do
-        if curl -s http://127.0.0.1:8765/status > /dev/null 2>&1; then
+        if curl -s "$BOT_STATUS_URL" > /dev/null 2>&1; then
             break
         fi
         sleep 0.5
     done
-    echo -e "${GREEN}✓ Gemma-Bot Webots controller active on http://127.0.0.1:8765${NC}"
+    echo -e "${GREEN}✓ Gemma-Bot Webots controller active on $BOT_BASE_URL${NC}"
 fi
 
 # ------------------------------------------------------------------------------
@@ -195,7 +227,7 @@ done
 echo -e "\n${BOLD}${GREEN}═════════════════════════════════════════════════════════════════${NC}"
 echo -e "${BOLD}${GREEN}🎉 ALL SYSTEMS ARE LIVE!${NC}"
 echo -e " • 🌐 Web UI:       ${BOLD}${CYAN}http://localhost:5173${NC}"
-echo -e " • 🤖 Robot Server: ${BOLD}${CYAN}http://127.0.0.1:8765${NC}"
+echo -e " • 🤖 Robot Server: ${BOLD}${CYAN}$BOT_BASE_URL${NC}"
 echo -e " • 🧠 Voice Server: ${BOLD}${CYAN}http://localhost:8000${NC}"
 echo -e " • 💡 Just speak naturally into your microphone!"
 echo -e " • ⏹️  Press ${BOLD}Ctrl+C${NC} in this terminal to stop everything."
