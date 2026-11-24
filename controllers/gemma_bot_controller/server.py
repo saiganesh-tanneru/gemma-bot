@@ -11,7 +11,10 @@ import config
 from state import COMMAND_QUEUE, ROBOT_STATE
 
 _LOOPBACK_HOSTS = {"127.0.0.1", "localhost", "::1"}
-_STR_FIELDS = {"mood", "gesture", "screen_color", "theme", "color", "gaze", "speech", "thought", "state"}
+_STR_FIELDS = {
+    "action", "mood", "gesture", "screen", "screen_color", "theme", "color",
+    "gaze", "speech", "thought", "state",
+}
 _BOOL_FIELDS = {"interrupt", "flush", "audio"}
 
 
@@ -65,11 +68,17 @@ class AICommandHandler(http.server.BaseHTTPRequestHandler):
     def log_message(self, format, *args):
         pass
 
-    def _send_json(self, status_code: int, payload: Dict[str, Any]) -> None:
+    def _send_json(self, status_code: int, payload: Dict[str, Any], close: bool = False) -> None:
+        body = json.dumps(payload).encode("utf-8")
         self.send_response(status_code)
         self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(body)))
+        if close:
+            self.send_header("Connection", "close")
+            self.close_connection = True
         self.end_headers()
-        self.wfile.write(json.dumps(payload).encode("utf-8"))
+        self.wfile.write(body)
+        self.wfile.flush()
 
     def _check_auth(self) -> bool:
         expected = getattr(self.server, "auth_token", "")
@@ -116,7 +125,7 @@ class AICommandHandler(http.server.BaseHTTPRequestHandler):
 
         max_bytes = getattr(self.server, "max_body_bytes", config.MAX_BODY_BYTES)
         if content_length > max_bytes:
-            self._send_json(413, {"error": f"Payload exceeds {max_bytes} byte limit"})
+            self._send_json(413, {"error": f"Payload exceeds {max_bytes} byte limit"}, close=True)
             return
 
         body = self.rfile.read(content_length).decode("utf-8", errors="replace")

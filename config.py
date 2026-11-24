@@ -4,6 +4,7 @@ All settings have safe local defaults and can be overridden via environment vari
 """
 
 import os
+import sys
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent
@@ -70,3 +71,25 @@ BRIDGE_WS_RETRY_BASE_SECONDS = _env_float("GEMMA_BRIDGE_WS_RETRY_BASE", 2.0)
 BRIDGE_WS_RETRY_MAX_SECONDS = _env_float("GEMMA_BRIDGE_WS_RETRY_MAX", 30.0)
 CLI_COMMAND_TIMEOUT_SECONDS = _env_float("GEMMA_CLI_COMMAND_TIMEOUT", 3.0)
 CLI_STATUS_TIMEOUT_SECONDS = _env_float("GEMMA_CLI_STATUS_TIMEOUT", 2.0)
+
+# Speech / TTS configuration
+_DEFAULT_TTS = "mac_say" if sys.platform == "darwin" else "null"
+TTS_PROVIDER = os.environ.get("GEMMA_TTS_PROVIDER", _DEFAULT_TTS).lower().strip()
+TTS_MAC_VOICE = os.environ.get("GEMMA_TTS_MAC_VOICE", "Samantha")
+
+# Sarvam AI API (env-only secret; never log or commit)
+SARVAM_API_KEY = os.environ.get("SARVAM_API_KEY", "")
+SARVAM_TTS_URL = os.environ.get("GEMMA_SARVAM_TTS_URL", "https://api.sarvam.ai/text-to-speech")
+SARVAM_TTS_MODEL = os.environ.get("GEMMA_SARVAM_TTS_MODEL", "bulbul:v3")
+SARVAM_TTS_SPEAKER = os.environ.get("GEMMA_SARVAM_TTS_SPEAKER", "shubh")
+SARVAM_TTS_LANGUAGE = os.environ.get("GEMMA_SARVAM_TTS_LANGUAGE", "en-IN")
+SARVAM_TTS_TIMEOUT_SECONDS = _env_float("GEMMA_SARVAM_TTS_TIMEOUT", 5.0)
+
+# Intent Parser / LLM configuration
+INTENT_PROVIDER = os.environ.get(
+    "GEMMA_INTENT_PROVIDER",
+    "sarvam" if SARVAM_API_KEY else "keyword",
+).lower().strip()
+SARVAM_CHAT_URL = os.environ.get("GEMMA_SARVAM_CHAT_URL", "https://api.sarvam.ai/v2/chat/completions")
+SARVAM_LLM_MODEL = os.environ.get("GEMMA_SARVAM_LLM_MODEL", "sarvam-105b")
+INTENT_TIMEOUT_SECONDS = _env_float("GEMMA_INTENT_TIMEOUT", 4.0)

@@ -7,9 +7,9 @@ phase-based gesture trajectories, keyboard/touch input, and HTTP AI commands.
 import logging
 import math
 import random
-import subprocess
 import sys
 from pathlib import Path
+from typing import Optional
 
 from controller import Keyboard, Robot, Supervisor
 
@@ -32,6 +32,7 @@ from gestures import GESTURE_DEFAULT_MOOD, GESTURES, resolve_gesture
 from input_map import KEYMAP, apply_key_action, build_keymap
 from server import AICommandHandler, start_command_server
 from state import COMMAND_QUEUE, ROBOT_STATE
+from tts import TTSHandle, TTSProvider, create_tts_provider
 
 logger = logging.getLogger("gemma_bot_controller")
 
@@ -55,7 +56,7 @@ __all__ = [
 class GemmaBotCompanion:
     """Main Webots companion robot controller."""
 
-    def __init__(self, start_server: bool = True):
+    def __init__(self, start_server: bool = True, tts_provider: Optional[TTSProvider] = None):
         self.robot = Supervisor()
         self.timestep = int(self.robot.getBasicTimeStep())
 
@@ -110,10 +111,11 @@ class GemmaBotCompanion:
         self.next_idle_action = 100
         self.next_blink = 140
 
-        # Speech state & audio process
+        # Speech state & TTS provider
         self.speech_text = ""
         self.speech_timer = 0
-        self.speech_process = None
+        self.tts_provider = tts_provider or create_tts_provider()
+        self.speech_handle: Optional[TTSHandle] = None
 
         # Gesture engine state
         self.active_gesture = None
@@ -155,40 +157,30 @@ class GemmaBotCompanion:
         )
 
     def trigger_speech(self, text: str, play_audio: bool = True) -> None:
-        """Speaks text out loud and activates animated lip-sync."""
+        """Speaks text out loud via TTSProvider and activates animated lip-sync."""
         if not text:
             return
         self.speech_text = str(text).strip()
-        if self.speech_process and self.speech_process.poll() is None:
-            try:
-                self.speech_process.terminate()
-            except Exception:
-                pass
-            self.speech_process = None
+        if self.speech_handle is not None:
+            self.speech_handle.stop()
+            self.speech_handle = None
 
-        words = len(self.speech_text.split())
-        est_seconds = max(1.6, words * 0.38 + 0.6)
-        self.speech_timer = int((est_seconds * 1000) / max(1, self.timestep))
+        handle = self.tts_provider.speak(self.speech_text, play_audio=play_audio)
+        self.speech_handle = handle
 
-        if play_audio:
-            try:
-                self.speech_process = subprocess.Popen(
-                    ["say", "-v", "Samantha", self.speech_text],
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL,
-                )
-            except Exception as e:
-                print(f"[TTS Audio Error]: {e}")
+        if handle.duration_seconds is not None and handle.duration_seconds > 0:
+            duration_seconds = handle.duration_seconds
+        else:
+            words = len(self.speech_text.split())
+            duration_seconds = max(1.6, words * 0.38 + 0.6)
+        self.speech_timer = max(1, int((duration_seconds * 1000) / max(1, self.timestep)))
         print(f"🗣️ Gemma-Bot: \"{self.speech_text}\"")
 
     def interrupt_speech(self) -> None:
         """Immediately silences speech playback and halts lip-sync."""
-        if self.speech_process and self.speech_process.poll() is None:
-            try:
-                self.speech_process.terminate()
-            except Exception:
-                pass
-        self.speech_process = None
+        if self.speech_handle is not None:
+            self.speech_handle.stop()
+            self.speech_handle = None
         self.speech_timer = 0
         self.speech_text = ""
         self.trigger_blink()
@@ -310,8 +302,8 @@ class GemmaBotCompanion:
                     play_audio = bool(cmd.get("audio", True))
                     self.trigger_speech(text_str, play_audio=play_audio)
 
-                if "screen_color" in cmd or "theme" in cmd or "color" in cmd:
-                    col_val = cmd.get("screen_color") or cmd.get("theme") or cmd.get("color")
+                if "screen_color" in cmd or "screen" in cmd or "theme" in cmd or "color" in cmd:
+                    col_val = cmd.get("screen_color") or cmd.get("screen") or cmd.get("theme") or cmd.get("color")
                     self.set_screen_theme(col_val)
 
                 print(f"[AI Command Executed] Mood={self.mood}, Gesture={cmd.get('gesture')}, Theme={self.current_theme}")

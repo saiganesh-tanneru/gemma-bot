@@ -2,6 +2,12 @@
 
 All notable changes to **Gemma-Bot** are documented in this file by phase.
 
+## Phase 5 — Speech Abstraction & LLM Intent Parser (`feat/phase-5-speech-llm`)
+- **Pluggable TTS (`controllers/gemma_bot_controller/tts.py`)**: Replaced hardcoded `say -v Samantha` with `TTSProvider` and implementations `MacSayTTS`, `SarvamTTS` (`POST https://api.sarvam.ai/text-to-speech`, `bulbul:v3` / `bulbul:v4-flash`, `api-subscription-key`, 2,500-char limit, Telugu auto-detection `te-IN`), and `NullTTS`.
+- **Audio-Duration Lip-Sync**: Controller now sizes `speech_timer` from actual WAV audio duration when returned by `TTSHandle`, retaining the word-count estimate only as fallback.
+- **Structured LLM Intent Parser (`intent_parser.py`)**: Added swappable `IntentProvider` (`SarvamIntentProvider` targeting `https://api.sarvam.ai/v2/chat/completions` with `json_schema`), strict action/mood/gesture/screen/gaze allowlist validation (`validate_intent_json`), off-loop `parse_async()`, and automatic fallback to Phase 1's word-boundary keyword parser on any failure, timeout, or disallowed output.
+- **Documentation & Tests**: Updated `README.md` with setup, environment variables, and text architecture diagram; added `tests/test_phase5_speech_llm.py`.
+
 ## Phase 4 — Security & Server Hardening (`feat/phase-4-security`)
 - **Multi-threaded HTTP Server**: Upgraded `HTTPServer` to `BotCommandHTTPServer(ThreadingHTTPServer)` with `daemon_threads = True`.
 - **Payload Limits & Schema Validation**: Enforced `Content-Length` checks and `MAX_BODY_BYTES` (default 16 KB, returning `413`), plus strict JSON object & field type validation (returning `400`).
