@@ -11,7 +11,7 @@ import math
 import random
 from controller import Robot, Keyboard
 
-class Gemma-BotCompanion:
+class GemmaBotCompanion:
     def __init__(self):
         self.robot = Robot()
         self.timestep = int(self.robot.getBasicTimeStep())
@@ -311,5 +311,5 @@ class Gemma-BotCompanion:
             self.render_face()
 
 if __name__ == "__main__":
-    companion = Gemma-BotCompanion()
+    companion = GemmaBotCompanion()
     companion.run()
