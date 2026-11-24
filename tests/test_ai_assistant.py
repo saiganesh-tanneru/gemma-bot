@@ -55,3 +55,12 @@ def test_multi_word_phrase_precedence():
     # "look around" (2 words) should trigger scan
     cmd_scan = parse_natural_language_intent("look around")
     assert cmd_scan.get("gesture") == "scan"
+
+
+def test_pytest_session_uses_keyword_intent_provider():
+    from intent_parser import create_intent_parser
+
+    # conftest.py forces the keyword provider so tests never hit the live
+    # Sarvam API, even when SARVAM_API_KEY is set in the environment.
+    parser = create_intent_parser()
+    assert parser.provider is None

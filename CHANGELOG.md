@@ -2,6 +2,11 @@
 
 All notable changes to **Gemma-Bot** are documented in this file by phase.
 
+## Unreleased
+- **Launcher wait timeouts (`start_all.sh`)**: Added a `wait_for` helper with bounded waits and loud failures — Ollama (8s), Webots (15s), and Gemma-Talk backend (60s) now exit non-zero instead of printing success after a timeout or waiting forever; the Web UI wait (10s) warns instead of failing silently.
+- **Sarvam chat endpoint (`config.py`)**: Changed the default `SARVAM_CHAT_URL` from `/v2/chat/completions` to `/v1/chat/completions` — /v1 is the preferred endpoint for sarvam-105b (some /v2 requests to it stall without an answer).
+- **Offline-safe tests (`tests/conftest.py`)**: Test sessions now force the keyword intent provider and remove `SARVAM_API_KEY`, so tests never hit the live Sarvam API; added a regression test in `tests/test_ai_assistant.py`.
+
 ## Phase 5 — Speech Abstraction & LLM Intent Parser (`feat/phase-5-speech-llm`)
 - **Pluggable TTS (`controllers/gemma_bot_controller/tts.py`)**: Replaced hardcoded `say -v Samantha` with `TTSProvider` and implementations `MacSayTTS`, `SarvamTTS` (`POST https://api.sarvam.ai/text-to-speech`, `bulbul:v3` / `bulbul:v4-flash`, `api-subscription-key`, 2,500-char limit, Telugu auto-detection `te-IN`), and `NullTTS`.
 - **Audio-Duration Lip-Sync**: Controller now sizes `speech_timer` from actual WAV audio duration when returned by `TTSHandle`, retaining the word-count estimate only as fallback.

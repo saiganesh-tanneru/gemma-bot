@@ -90,6 +90,9 @@ INTENT_PROVIDER = os.environ.get(
     "GEMMA_INTENT_PROVIDER",
     "sarvam" if SARVAM_API_KEY else "keyword",
 ).lower().strip()
-SARVAM_CHAT_URL = os.environ.get("GEMMA_SARVAM_CHAT_URL", "https://api.sarvam.ai/v2/chat/completions")
+# NOTE: /v1 is the preferred endpoint for sarvam-105b. /v2 also serves it, but
+# some /v2 requests to sarvam-105b have been observed stalling without an answer
+# (LiteLLM keeps sarvam-105b on /v1 for this reason). Open-weight models must use /v2.
+SARVAM_CHAT_URL = os.environ.get("GEMMA_SARVAM_CHAT_URL", "https://api.sarvam.ai/v1/chat/completions")
 SARVAM_LLM_MODEL = os.environ.get("GEMMA_SARVAM_LLM_MODEL", "sarvam-105b")
 INTENT_TIMEOUT_SECONDS = _env_float("GEMMA_INTENT_TIMEOUT", 4.0)

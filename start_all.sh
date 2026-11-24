@@ -66,6 +66,24 @@ _check_bot_status() {
     fi
 }
 
+# wait_for <timeout_seconds> <command...>
+# Runs the command every 0.5s until it succeeds or the timeout elapses.
+# Returns 0 on success, 1 on timeout. Callers print the error and decide
+# whether a timeout is fatal.
+wait_for() {
+    local timeout_secs="$1"
+    shift
+    local tries=$((timeout_secs * 2))
+    local i
+    for ((i = 1; i <= tries; i++)); do
+        if "$@" > /dev/null 2>&1; then
+            return 0
+        fi
+        sleep 0.5
+    done
+    return 1
+}
+
 # Color styles
 BOLD="\033[1m"
 GREEN="\033[0;32m"
@@ -140,13 +158,11 @@ else
         OLLAMA_PID=$!
         PIDS+=("$OLLAMA_PID")
     fi
-    # Wait for Ollama
-    for i in {1..15}; do
-        if curl -s http://localhost:11434/api/tags > /dev/null 2>&1; then
-            break
-        fi
-        sleep 0.5
-    done
+    # Wait for Ollama (fail loudly instead of claiming success on timeout)
+    if ! wait_for 8 curl -s http://localhost:11434/api/tags; then
+        echo -e "${RED}❌ Error: Ollama did not become ready in time.${NC}"
+        exit 1
+    fi
     echo -e "${GREEN}✓ Ollama started successfully.${NC}"
 fi
 
@@ -163,12 +179,10 @@ else
     PIDS+=("$WEBOTS_PID")
 
     echo "Waiting for Gemma-Bot AI controller to initialize..."
-    for i in {1..30}; do
-        if _check_bot_status; then
-            break
-        fi
-        sleep 0.5
-    done
+    if ! wait_for 15 _check_bot_status; then
+        echo -e "${RED}❌ Error: Gemma-Bot controller did not become ready in time.${NC}"
+        exit 1
+    fi
     echo -e "${GREEN}✓ Gemma-Bot Webots controller active on $BOT_BASE_URL${NC}"
 fi
 
@@ -187,9 +201,10 @@ else
     PIDS+=("$SERVER_PID")
 
     echo "Waiting for voice models (Silero VAD + Whisper + Kokoro TTS) to warm up..."
-    while ! curl -s http://localhost:8000/health > /dev/null 2>&1; do
-        sleep 0.5
-    done
+    if ! wait_for 60 curl -s http://localhost:8000/health; then
+        echo -e "${RED}❌ Error: Gemma-Talk backend did not become ready in time (60s).${NC}"
+        exit 1
+    fi
     echo -e "${GREEN}✓ Gemma-Talk backend is ready on http://localhost:8000${NC}"
 fi
 
@@ -224,13 +239,10 @@ echo -e "\n${BOLD}[5/5] Launching Web UI Client...${NC}"
 CLIENT_PID=$!
 PIDS+=("$CLIENT_PID")
 
-# Wait for client port 5173
-for i in {1..20}; do
-    if curl -s http://localhost:5173 > /dev/null 2>&1; then
-        break
-    fi
-    sleep 0.5
-done
+# Wait for client port 5173 (warn only: the other services keep working without the UI)
+if ! wait_for 10 curl -s http://localhost:5173; then
+    echo -e "${YELLOW}⚠️ Warning: Web UI did not respond on http://localhost:5173 after 10s.${NC}"
+fi
 
 echo -e "\n${BOLD}${GREEN}═════════════════════════════════════════════════════════════════${NC}"
 echo -e "${BOLD}${GREEN}🎉 ALL SYSTEMS ARE LIVE!${NC}"
