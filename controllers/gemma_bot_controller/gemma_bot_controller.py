@@ -517,15 +517,15 @@ class GemmaBotCompanion:
         elif name in ("wiggle",):
             self.gesture_total_frames = 80
         elif name in ("curious", "tilt"):
-            self.gesture_total_frames = 60
+            self.gesture_total_frames = 75
         elif name in ("tilt_left", "lean_left"):
             self.gesture_total_frames = 55
         elif name in ("tilt_right", "lean_right"):
             self.gesture_total_frames = 55
         elif name in ("perk_up", "alert"):
-            self.gesture_total_frames = 45
+            self.gesture_total_frames = 65
         elif name in ("droop",):
-            self.gesture_total_frames = 60
+            self.gesture_total_frames = 85
         elif name in ("bounce", "hop"):
             self.gesture_total_frames = 50
         elif name in ("groove", "dance"):
@@ -680,10 +680,26 @@ class GemmaBotCompanion:
                 self.target_yaw = math.sin(t * 0.3) * 0.25
                 self.target_pitch = -0.15 + abs(math.sin(t * 0.2)) * 0.1
             elif self.active_gesture in ("curious", "tilt"):
-                # Head tilts sideways with yaw
-                self.target_yaw = 0.35
-                self.target_pitch = -0.1
-                self.gaze_x = -0.5
+                # Expressive Inquisitive Head Tilt: tilts sideways decisively, bobs attentively, then eases back
+                p = t / total
+                if p < 0.25:
+                    ease = math.sin(p * 2.0 * math.pi * 0.5)
+                    self.target_yaw = 0.58 * ease
+                    self.target_pitch = -0.15 * ease
+                    self.gaze_x = -0.90 * ease
+                    self.gaze_y = -0.35 * ease
+                elif p < 0.75:
+                    subtle_bob = math.sin((t - 18) * 0.28) * 0.06
+                    self.target_yaw = 0.55 + subtle_bob
+                    self.target_pitch = -0.15 + subtle_bob * 0.6
+                    self.gaze_x = -0.90
+                    self.gaze_y = -0.30
+                else:
+                    ease_back = (1.0 - p) / 0.25
+                    self.target_yaw = 0.55 * ease_back
+                    self.target_pitch = -0.15 * ease_back
+                    self.gaze_x = -0.90 * ease_back
+                    self.gaze_y = -0.30 * ease_back
             elif self.active_gesture in ("tilt_left", "lean_left"):
                 self.target_yaw = 0.45
                 self.target_pitch = -0.08
@@ -693,13 +709,39 @@ class GemmaBotCompanion:
                 self.target_pitch = -0.08
                 self.gaze_x = 0.8
             elif self.active_gesture in ("perk_up", "alert"):
-                self.target_pitch = -0.25
-                self.target_yaw = 0.0
-                self.gaze_y = -0.6
+                # Sudden Attentive Upward Motion: snaps head up high with alert flutter, then settles
+                p = t / total
+                if p < 0.20:
+                    snap = math.sin(p * 2.5 * math.pi)
+                    self.target_pitch = -0.38 * snap
+                    self.target_yaw = 0.0
+                    self.gaze_y = -0.95
+                elif p < 0.75:
+                    alert_flutter = math.sin((t - 13) * 0.45) * 0.05
+                    self.target_pitch = -0.36 + alert_flutter
+                    self.target_yaw = math.sin((t - 13) * 0.25) * 0.08
+                    self.gaze_y = -0.90
+                else:
+                    ease_back = (1.0 - p) / 0.25
+                    self.target_pitch = -0.36 * ease_back
+                    self.gaze_y = -0.90 * ease_back
             elif self.active_gesture in ("droop",):
-                self.target_pitch = 0.35
-                self.target_yaw = 0.0
-                self.gaze_y = 0.6
+                # Sleepy / Resting Slump: heavy forward slump with rhythmic breathing
+                p = t / total
+                if p < 0.35:
+                    slump = math.sin(p * (math.pi / 0.7))
+                    self.target_pitch = 0.40 * slump
+                    self.target_yaw = 0.0
+                    self.gaze_y = 0.90 * slump
+                elif p < 0.78:
+                    sleep_breath = math.sin((t - 30) * 0.16) * 0.06
+                    self.target_pitch = 0.38 + sleep_breath
+                    self.target_yaw = math.sin((t - 30) * 0.08) * 0.04
+                    self.gaze_y = 0.90
+                else:
+                    ease_back = (1.0 - p) / 0.22
+                    self.target_pitch = 0.38 * ease_back
+                    self.gaze_y = 0.90 * ease_back
             elif self.active_gesture in ("bounce", "hop"):
                 # Fast energetic vertical bobbing
                 self.target_pitch = -0.18 + math.sin(t * 0.4) * 0.18
@@ -813,8 +855,8 @@ class GemmaBotCompanion:
             self.gaze_x = 0.0
             self.gaze_y = 0.5
 
-        # 4. Smooth servo interpolation
-        alpha = 0.10
+        # 4. Smooth servo interpolation (crisper response during active gestures)
+        alpha = 0.22 if self.active_gesture else 0.12
         self.cur_yaw += (self.target_yaw - self.cur_yaw) * alpha
         self.cur_pitch += (self.target_pitch - self.cur_pitch) * alpha
         self.yaw_motor.setPosition(self.cur_yaw)
