@@ -28,9 +28,23 @@ A complete Webots simulation of **Gemma-Bot**, an expressive desktop companion r
 
 ---
 
-## 🚀 How to Run
+## 🚀 Quick Start (1-Command All-In-One)
 
-### 1. Launch in Webots
+To launch **everything** (Ollama, Webots simulation in real-time mode, Gemma-Talk voice backend, physical gesture bridge, and web audio UI) with one command:
+
+```bash
+cd /Users/saiganeshtanneru/Documents/GitHub/robots/gemma-bot
+./start_all.sh
+```
+*(Or from `gemma-talk`, run `./start-with-bot.sh`).*
+
+When running, just speak naturally into your microphone! Press **Ctrl+C** anytime to cleanly stop all services.
+
+---
+
+## 🛠️ Individual Manual Controls
+
+### 1. Launch in Webots Manually
 1. Open **Webots** (`/Applications/Webots.app`).
 2. Go to **File → Open World...** and select `worlds/gemma_bot.wbt`.
 3. Press the **Play (▶)** button on the top toolbar.
