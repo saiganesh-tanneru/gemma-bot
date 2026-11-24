@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 # ==============================================================================
-# Gemma-Bot & Gemma-Talk: All-In-One Unified Launch Script
+# Gemma-Bot Unified Launch Script (Self-Contained, Sarvam AI Powered)
 # ==============================================================================
-# Launches all services needed for full conversational desktop buddy:
-# 1. Ollama local LLM server (if not already running)
+# Launches all services from within gemma-bot:
+# 1. Sarvam AI configuration check
 # 2. Webots 3D Simulation (Gemma-Bot in realtime mode)
-# 3. Gemma-Talk FastAPI Voice Backend (Silero VAD + Whisper + Ollama + Kokoro TTS)
-# 4. Gemma-Talk to Gemma-Bot WebSocket Bridge (physical actions & lip sync)
-# 5. Gemma-Talk Web UI Frontend & opens browser at http://localhost:5173
+# 3. Integrated Voice Server (voice_server: Silero VAD + STT + Sarvam LLM/TTS)
+# 4. Robot <-> Voice Bridge (gemma_talk_bridge.py)
+# 5. Voice Web UI (voice_client) & opens browser
 # ==============================================================================
 
 set -e
@@ -27,62 +27,27 @@ if [ -f "$BOT_DIR/.env" ]; then
     done < "$BOT_DIR/.env"
 fi
 
-# Determine python interpreter for config parsing and running the bridge
 if [ -x "$BOT_DIR/.venv/bin/python3" ]; then
     CFG_PYTHON="$BOT_DIR/.venv/bin/python3"
 else
     CFG_PYTHON="$(command -v python3)"
 fi
 
-if [ -n "${GEMMA_PYTHON_BIN:-}" ] && [ -x "$GEMMA_PYTHON_BIN" ]; then
-    PYTHON_BIN="$GEMMA_PYTHON_BIN"
-elif [ -f "${GEMMA_TALK_DIR:-$HOME/Documents/gemma-talk}/server/.venv/bin/python3" ]; then
-    PYTHON_BIN="${GEMMA_TALK_DIR:-$HOME/Documents/gemma-talk}/server/.venv/bin/python3"
-elif [ -f "$BOT_DIR/.venv/bin/python3" ]; then
-    PYTHON_BIN="$BOT_DIR/.venv/bin/python3"
-else
-    PYTHON_BIN="$CFG_PYTHON"
-fi
+PYTHON_BIN="${GEMMA_PYTHON_BIN:-$CFG_PYTHON}"
 
 _cfg() {
     "$CFG_PYTHON" -c "import sys; sys.path.insert(0, '$BOT_DIR'); import config; print($1)"
 }
 
-TALK_DIR="${GEMMA_TALK_DIR:-$(_cfg 'str(config.GEMMA_TALK_DIR)')}"
 WEBOTS_APP="${WEBOTS_APP:-$(_cfg 'config.WEBOTS_APP')}"
 LOG_DIR="${GEMMA_LOG_DIR:-$(_cfg 'str(config.LOG_DIR)')}"
-BOT_HOST="$(_cfg 'config.BOT_HOST')"
-BOT_PORT="$(_cfg 'config.BOT_PORT')"
 BOT_STATUS_URL="$(_cfg 'config.BOT_STATUS_URL')"
 BOT_BASE_URL="$(_cfg 'config.BOT_BASE_URL')"
+VOICE_HOST="$(_cfg 'config.VOICE_SERVER_HOST')"
+VOICE_PORT="$(_cfg 'config.VOICE_SERVER_PORT')"
+VOICE_CLIENT_PORT="$(_cfg 'config.VOICE_CLIENT_PORT')"
 WORLD_PATH="$(_cfg 'str(config.WORLD_PATH)')"
 mkdir -p "$LOG_DIR"
-
-_check_bot_status() {
-    if [ -n "${GEMMA_BOT_TOKEN:-}" ]; then
-        curl -sf -H "X-Bot-Token: $GEMMA_BOT_TOKEN" "$BOT_STATUS_URL" > /dev/null 2>&1
-    else
-        curl -sf "$BOT_STATUS_URL" > /dev/null 2>&1
-    fi
-}
-
-# wait_for <timeout_seconds> <command...>
-# Runs the command every 0.5s until it succeeds or the timeout elapses.
-# Returns 0 on success, 1 on timeout. Callers print the error and decide
-# whether a timeout is fatal.
-wait_for() {
-    local timeout_secs="$1"
-    shift
-    local tries=$((timeout_secs * 2))
-    local i
-    for ((i = 1; i <= tries; i++)); do
-        if "$@" > /dev/null 2>&1; then
-            return 0
-        fi
-        sleep 0.5
-    done
-    return 1
-}
 
 # Color styles
 BOLD="\033[1m"
@@ -90,26 +55,17 @@ GREEN="\033[0;32m"
 CYAN="\033[0;36m"
 YELLOW="\033[1;33m"
 RED="\033[0;31m"
-MAGENTA="\033[0;35m"
 NC="\033[0m"
 
 echo -e "\n${BOLD}${CYAN}╔═════════════════════════════════════════════════════════════════╗${NC}"
-echo -e "${BOLD}${CYAN}║           🤖 GEMMA-BOT + GEMMA-TALK UNIFIED LAUNCHER           ║${NC}"
+echo -e "${BOLD}${CYAN}║            🤖 GEMMA-BOT SARVAM VOICE LAUNCHER                   ║${NC}"
 echo -e "${BOLD}${CYAN}╚═════════════════════════════════════════════════════════════════╝${NC}\n"
-
-# Verify directories
-if [ ! -d "$TALK_DIR" ]; then
-    echo -e "${RED}❌ Error: Gemma-Talk directory not found at $TALK_DIR${NC}"
-    echo "Set GEMMA_TALK_DIR environment variable if installed in another location."
-    exit 1
-fi
 
 if [ ! -x "$WEBOTS_APP" ]; then
     echo -e "${RED}❌ Error: Webots application not found at $WEBOTS_APP${NC}"
     exit 1
 fi
 
-# Track spawned process PIDs for clean exit
 PIDS=()
 CLEANED_UP=0
 
@@ -131,7 +87,7 @@ cleanup() {
         return 0
     fi
     CLEANED_UP=1
-    echo -e "\n${BOLD}${YELLOW}🛑 Shutting down all Gemma-Bot and Gemma-Talk services...${NC}"
+    echo -e "\n${BOLD}${YELLOW}🛑 Shutting down all Gemma-Bot services...${NC}"
     for pid in "${PIDS[@]}"; do
         kill_tree "$pid"
     done
@@ -141,29 +97,37 @@ trap cleanup EXIT
 trap 'cleanup; exit 130' SIGINT
 trap 'cleanup; exit 143' SIGTERM
 
+_check_bot_status() {
+    if [ -n "${GEMMA_BOT_TOKEN:-}" ]; then
+        curl -sf -H "X-Bot-Token: $GEMMA_BOT_TOKEN" "$BOT_STATUS_URL" > /dev/null 2>&1
+    else
+        curl -sf "$BOT_STATUS_URL" > /dev/null 2>&1
+    fi
+}
+
+# wait_for <timeout_seconds> <command...>
+wait_for() {
+    local timeout_secs="$1"
+    shift
+    local tries=$((timeout_secs * 2))
+    local i
+    for ((i = 1; i <= tries; i++)); do
+        if "$@" > /dev/null 2>&1; then
+            return 0
+        fi
+        sleep 0.5
+    done
+    return 1
+}
+
 # ------------------------------------------------------------------------------
-# 1. Check & Launch Ollama
+# 1. Check Sarvam AI Configuration
 # ------------------------------------------------------------------------------
-echo -e "${BOLD}[1/5] Checking Ollama LLM Service...${NC}"
-if curl -s http://localhost:11434/api/tags > /dev/null 2>&1; then
-    echo -e "${GREEN}✓ Ollama is already active on http://localhost:11434${NC}"
+echo -e "${BOLD}[1/5] Checking Sarvam AI Configuration...${NC}"
+if [ -n "${SARVAM_API_KEY:-}" ]; then
+    echo -e "${GREEN}✓ SARVAM_API_KEY detected (Sarvam LLM & TTS ready)${NC}"
 else
-    echo -e "Starting Ollama server..."
-    if command -v ollama > /dev/null 2>&1; then
-        ollama serve > /dev/null 2>&1 &
-        OLLAMA_PID=$!
-        PIDS+=("$OLLAMA_PID")
-    elif [ -x "$HOME/.local/bin/ollama" ]; then
-        "$HOME/.local/bin/ollama" serve > /dev/null 2>&1 &
-        OLLAMA_PID=$!
-        PIDS+=("$OLLAMA_PID")
-    fi
-    # Wait for Ollama (fail loudly instead of claiming success on timeout)
-    if ! wait_for 8 curl -s http://localhost:11434/api/tags; then
-        echo -e "${RED}❌ Error: Ollama did not become ready in time.${NC}"
-        exit 1
-    fi
-    echo -e "${GREEN}✓ Ollama started successfully.${NC}"
+    echo -e "${YELLOW}⚠️  SARVAM_API_KEY not set. Voice LLM & Sarvam TTS will need it in .env or env.${NC}"
 fi
 
 # ------------------------------------------------------------------------------
@@ -187,31 +151,41 @@ else
 fi
 
 # ------------------------------------------------------------------------------
-# 3. Launch Gemma-Talk Voice Assistant Backend
+# 3. Launch Integrated Sarvam Voice Server
 # ------------------------------------------------------------------------------
-echo -e "\n${BOLD}[3/5] Starting Gemma-Talk Voice Backend...${NC}"
-if curl -s http://localhost:8000/health > /dev/null 2>&1; then
-    echo -e "${GREEN}✓ Gemma-Talk backend is already running on http://localhost:8000${NC}"
+echo -e "\n${BOLD}[3/5] Starting Gemma-Bot Voice Server (Sarvam AI)...${NC}"
+VOICE_HEALTH_URL="http://127.0.0.1:${VOICE_PORT}/health"
+if curl -sf "$VOICE_HEALTH_URL" > /dev/null 2>&1; then
+    echo -e "${GREEN}✓ Voice server is already running on http://127.0.0.1:${VOICE_PORT}${NC}"
 else
+    VOICE_LOG="$LOG_DIR/voice_server.log"
     (
-        cd "$TALK_DIR"
-        "$TALK_DIR/start-server.sh"
-    ) &
+        cd "$BOT_DIR"
+        export PYTHONPATH="$BOT_DIR"
+        exec "$PYTHON_BIN" -m uvicorn voice_server.main:app --host "$VOICE_HOST" --port "$VOICE_PORT"
+    ) > "$VOICE_LOG" 2>&1 &
     SERVER_PID=$!
     PIDS+=("$SERVER_PID")
 
-    echo "Waiting for voice models (Silero VAD + Whisper + Kokoro TTS) to warm up..."
-    if ! wait_for 60 curl -s http://localhost:8000/health; then
-        echo -e "${RED}❌ Error: Gemma-Talk backend did not become ready in time (60s).${NC}"
-        exit 1
-    fi
-    echo -e "${GREEN}✓ Gemma-Talk backend is ready on http://localhost:8000${NC}"
+    echo "Waiting for voice server health on $VOICE_HEALTH_URL..."
+    for i in {1..60}; do
+        if ! kill -0 "$SERVER_PID" > /dev/null 2>&1; then
+            echo -e "${RED}❌ Error: voice_server died on startup!${NC}"
+            tail -n 20 "$VOICE_LOG" 2>/dev/null || true
+            exit 1
+        fi
+        if curl -sf "$VOICE_HEALTH_URL" > /dev/null 2>&1; then
+            break
+        fi
+        sleep 0.5
+    done
+    echo -e "${GREEN}✓ Voice server ready on http://127.0.0.1:${VOICE_PORT} (log: $VOICE_LOG)${NC}"
 fi
 
 # ------------------------------------------------------------------------------
-# 4. Launch Gemma-Talk to Gemma-Bot Bridge
+# 4. Launch Voice <-> Robot Bridge
 # ------------------------------------------------------------------------------
-echo -e "\n${BOLD}[4/5] Launching Gemma-Talk <-> Gemma-Bot Bridge...${NC}"
+echo -e "\n${BOLD}[4/5] Launching Voice <-> Gemma-Bot Bridge...${NC}"
 BRIDGE_LOG="$LOG_DIR/gemma_talk_bridge.log"
 "$PYTHON_BIN" "$BOT_DIR/gemma_talk_bridge.py" > "$BRIDGE_LOG" 2>&1 &
 BRIDGE_PID=$!
@@ -219,42 +193,43 @@ PIDS+=("$BRIDGE_PID")
 
 sleep 0.5
 if ! kill -0 "$BRIDGE_PID" > /dev/null 2>&1; then
-    echo -e "${RED}❌ Error: Gemma-Talk bridge (gemma_talk_bridge.py) died on startup!${NC}"
+    echo -e "${RED}❌ Error: Gemma-Bot bridge (gemma_talk_bridge.py) died on startup!${NC}"
     if [ -s "$BRIDGE_LOG" ]; then
         echo -e "${YELLOW}--- Bridge log ($BRIDGE_LOG) ---${NC}"
         tail -n 20 "$BRIDGE_LOG"
     fi
     exit 1
 fi
-echo -e "${GREEN}✓ Gemma-Talk bridge active (PID $BRIDGE_PID, log: $BRIDGE_LOG)${NC}"
+echo -e "${GREEN}✓ Bridge active (PID $BRIDGE_PID, log: $BRIDGE_LOG)${NC}"
 
 # ------------------------------------------------------------------------------
-# 5. Launch Gemma-Talk Web UI & Open Browser
+# 5. Launch Voice Web UI & Open Browser
 # ------------------------------------------------------------------------------
-echo -e "\n${BOLD}[5/5] Launching Web UI Client...${NC}"
-(
-    cd "$TALK_DIR"
-    "$TALK_DIR/start-client.sh" > /dev/null 2>&1
-) &
-CLIENT_PID=$!
-PIDS+=("$CLIENT_PID")
+echo -e "\n${BOLD}[5/5] Launching Voice Web UI Client...${NC}"
+CLIENT_URL="http://localhost:${VOICE_CLIENT_PORT}"
+if [ -d "$BOT_DIR/voice_client" ] && command -v npm > /dev/null 2>&1; then
+    CLIENT_LOG="$LOG_DIR/voice_client.log"
+    (
+        cd "$BOT_DIR/voice_client"
+        exec npm run dev -- --port "$VOICE_CLIENT_PORT"
+    ) > "$CLIENT_LOG" 2>&1 &
+    CLIENT_PID=$!
+    PIDS+=("$CLIENT_PID")
 
-# Wait for client port 5173 (warn only: the other services keep working without the UI)
-if ! wait_for 10 curl -s http://localhost:5173; then
-    echo -e "${YELLOW}⚠️ Warning: Web UI did not respond on http://localhost:5173 after 10s.${NC}"
+    if ! wait_for 10 curl -sf "$CLIENT_URL"; then
+        echo -e "${YELLOW}⚠️ Warning: Web UI did not respond on ${CLIENT_URL} after 10s.${NC}"
+    fi
+else
+    echo -e "${YELLOW}⚠️  npm or voice_client not found; skipping web UI startup.${NC}"
 fi
 
 echo -e "\n${BOLD}${GREEN}═════════════════════════════════════════════════════════════════${NC}"
 echo -e "${BOLD}${GREEN}🎉 ALL SYSTEMS ARE LIVE!${NC}"
-echo -e " • 🌐 Web UI:       ${BOLD}${CYAN}http://localhost:5173${NC}"
-echo -e " • 🤖 Robot Server: ${BOLD}${CYAN}$BOT_BASE_URL${NC}"
-echo -e " • 🧠 Voice Server: ${BOLD}${CYAN}http://localhost:8000${NC}"
-echo -e " • 💡 Just speak naturally into your microphone!"
+echo -e " • 🌐 Web UI:       ${BOLD}${CYAN}${CLIENT_URL}${NC}"
+echo -e " • 🤖 Robot Server: ${BOLD}${CYAN}${BOT_BASE_URL}${NC}"
+echo -e " • 🧠 Voice Server: ${BOLD}${CYAN}http://127.0.0.1:${VOICE_PORT}${NC}"
 echo -e " • ⏹️  Press ${BOLD}Ctrl+C${NC} in this terminal to stop everything."
 echo -e "${BOLD}${GREEN}═════════════════════════════════════════════════════════════════${NC}\n"
 
-# Open the browser automatically
-open "http://localhost:5173" || true
-
-# Keep running until Ctrl+C
+open "$CLIENT_URL" || true
 wait

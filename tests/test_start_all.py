@@ -15,41 +15,36 @@ def _make_exe(path: Path, content: str) -> None:
 
 
 def test_start_all_launches_bridge_and_cleans_up(tmp_path):
-    """start_all.sh must launch gemma_talk_bridge.py in background, log it, and clean up on SIGTERM."""
+    """start_all.sh must run self-contained without GEMMA_TALK_DIR, launch bridge, and clean up on SIGTERM."""
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
-    talk_dir = tmp_path / "gemma-talk"
-    (talk_dir / "server" / ".venv" / "bin").mkdir(parents=True)
 
-    # Stub curl to pretend Ollama, Webots, gemma-talk backend, and UI are already healthy
     _make_exe(bin_dir / "curl", "#!/usr/bin/env bash\nexit 0\n")
     _make_exe(bin_dir / "open", "#!/usr/bin/env bash\nexit 0\n")
+    _make_exe(bin_dir / "npm", "#!/usr/bin/env bash\nexec sleep 30\n")
 
     webots_stub = tmp_path / "webots"
-    _make_exe(webots_stub, "#!/usr/bin/env bash\nsleep 30\n")
-
-    _make_exe(talk_dir / "start-server.sh", "#!/usr/bin/env bash\nsleep 30\n")
-    _make_exe(talk_dir / "start-client.sh", "#!/usr/bin/env bash\nsleep 30\n")
+    _make_exe(webots_stub, "#!/usr/bin/env bash\nexec sleep 30\n")
 
     bridge_marker = tmp_path / "bridge_started.txt"
     bridge_pid_file = tmp_path / "bridge.pid"
-    fake_python = talk_dir / "server" / ".venv" / "bin" / "python3"
+    fake_python = tmp_path / "fake_python3"
     _make_exe(
         fake_python,
         f"""#!/usr/bin/env bash
 echo "$@" > "{bridge_marker}"
 echo $$ > "{bridge_pid_file}"
 echo "fake bridge started"
-sleep 30
+exec sleep 30
 """,
     )
 
     log_dir = tmp_path / "logs"
     env = os.environ.copy()
     env["PATH"] = f"{bin_dir}:{env['PATH']}"
-    env["GEMMA_TALK_DIR"] = str(talk_dir)
     env["WEBOTS_APP"] = str(webots_stub)
     env["GEMMA_LOG_DIR"] = str(log_dir)
+    env["GEMMA_PYTHON_BIN"] = str(fake_python)
 
     proc = subprocess.Popen(
         ["bash", str(START_ALL)],
@@ -71,11 +66,9 @@ sleep 30
         assert "gemma_talk_bridge.py" in bridge_marker.read_text(encoding="utf-8")
 
         bridge_pid = int(bridge_pid_file.read_text(encoding="utf-8").strip())
-        # Verify log file was created
         log_files = list(log_dir.glob("*bridge*.log")) if log_dir.exists() else []
         assert log_files, "Expected a bridge log file to be created"
 
-        # Send SIGTERM and verify cleanup kills the bridge process
         proc.send_signal(signal.SIGTERM)
         proc.wait(timeout=5)
 
@@ -96,18 +89,15 @@ def test_start_all_fails_loudly_if_bridge_dies_on_startup(tmp_path):
     """start_all.sh must fail loudly (non-zero exit) if gemma_talk_bridge.py dies on startup."""
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
-    talk_dir = tmp_path / "gemma-talk"
-    (talk_dir / "server" / ".venv" / "bin").mkdir(parents=True)
 
     _make_exe(bin_dir / "curl", "#!/usr/bin/env bash\nexit 0\n")
     _make_exe(bin_dir / "open", "#!/usr/bin/env bash\nexit 0\n")
+    _make_exe(bin_dir / "npm", "#!/usr/bin/env bash\nexec sleep 30\n")
 
     webots_stub = tmp_path / "webots"
-    _make_exe(webots_stub, "#!/usr/bin/env bash\nsleep 30\n")
-    _make_exe(talk_dir / "start-server.sh", "#!/usr/bin/env bash\nsleep 30\n")
-    _make_exe(talk_dir / "start-client.sh", "#!/usr/bin/env bash\nsleep 30\n")
+    _make_exe(webots_stub, "#!/usr/bin/env bash\nexec sleep 30\n")
 
-    fake_python = talk_dir / "server" / ".venv" / "bin" / "python3"
+    fake_python = tmp_path / "fake_python3"
     _make_exe(
         fake_python,
         "#!/usr/bin/env bash\necho 'boom: missing dependency' >&2\nexit 1\n",
@@ -116,9 +106,9 @@ def test_start_all_fails_loudly_if_bridge_dies_on_startup(tmp_path):
     log_dir = tmp_path / "logs"
     env = os.environ.copy()
     env["PATH"] = f"{bin_dir}:{env['PATH']}"
-    env["GEMMA_TALK_DIR"] = str(talk_dir)
     env["WEBOTS_APP"] = str(webots_stub)
     env["GEMMA_LOG_DIR"] = str(log_dir)
+    env["GEMMA_PYTHON_BIN"] = str(fake_python)
 
     result = subprocess.run(
         ["bash", str(START_ALL)],

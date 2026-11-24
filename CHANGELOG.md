@@ -2,6 +2,13 @@
 
 All notable changes to **Gemma-Bot** are documented in this file by phase.
 
+## Voice Pipeline Integration — Sarvam AI (`feat/voice-pipeline-sarvam`)
+- **Integrated Voice Server (`voice_server/`)**: Moved `gemma-talk`'s full-duplex voice pipeline (Silero VAD, AI4Bharat/Whisper STT, `SentenceChunker`, `VoiceSession` with barge-in) into `gemma-bot` and replaced `OllamaStreamingClient` (`gemma4`) with `SarvamStreamingClient` (`Sarvam /v1/chat/completions` streaming SSE via `config.SARVAM_CHAT_URL`).
+- **Sarvam Voice TTS (`voice_server/pipeline/tts.py`)**: Added Sarvam Bulbul 24kHz Int16 PCM cloud synthesis (`sarvam` engine, default when `SARVAM_API_KEY` is set) alongside optional local `kokoro` ONNX.
+- **Event Bus & Bridge Sync (`/ws/events`)**: Added `EventBroadcaster` in `voice_server` and pointed `GEMMA_TALK_WS_URL` at `/ws/events` so `gemma_talk_bridge.py` receives live browser session events without duplicating direct `_notify_robot` calls.
+- **Integrated Web UI (`voice_client/`) & Self-Contained `start_all.sh`**: Ported the React/Vite UI into `voice_client/` (branded for Gemma-Bot + Sarvam AI) and updated `start_all.sh` (preserving `wait_for` bounded timeouts) to run entirely inside `gemma-bot` without external `gemma-talk` or Ollama dependencies.
+- **Tests**: Added `tests/test_voice_pipeline.py` and updated `tests/test_start_all.py`.
+
 ## Unreleased
 - **Launcher wait timeouts (`start_all.sh`)**: Added a `wait_for` helper with bounded waits and loud failures — Ollama (8s), Webots (15s), and Gemma-Talk backend (60s) now exit non-zero instead of printing success after a timeout or waiting forever; the Web UI wait (10s) warns instead of failing silently.
 - **Sarvam chat endpoint (`config.py`)**: Changed the default `SARVAM_CHAT_URL` from `/v2/chat/completions` to `/v1/chat/completions` — /v1 is the preferred endpoint for sarvam-105b (some /v2 requests to it stall without an answer).

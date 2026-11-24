@@ -12,8 +12,8 @@ robot behaviors and expressions:
 - INTERRUPTED -> Instant barge-in cutoff: silences speech, halts mouth, blinks.
 
 Usage:
-  # 1. Start Gemma-Talk server in another terminal:
-  #    cd "$GEMMA_TALK_DIR" && ./start-server.sh
+  # 1. Start the integrated voice server in another terminal:
+  #    python3 -m uvicorn voice_server.main:app --host 0.0.0.0 --port 8000
   #
   # 2. Run this bridge:
   #    python3 gemma_talk_bridge.py
@@ -293,10 +293,10 @@ async def connect_to_gemma_talk():
                                     logger.info("User: %r", user_text)
                                 elif msg_type == "llm_sentence":
                                     bot_text = data.get("text", "")
-                                    logger.info("Gemma: %r", bot_text)
+                                    logger.info("Assistant: %r", bot_text)
                                     _enqueue_command(
                                         command_queue,
-                                        {"mood": "HAPPY", "speech": bot_text},
+                                        {"mood": "HAPPY", "speech": bot_text, "audio": False},
                                     )
 
                             except json.JSONDecodeError as exc:

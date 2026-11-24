@@ -53,9 +53,36 @@ BOT_STATUS_URL = f"{BOT_BASE_URL}/status"
 BOT_AUTH_TOKEN = os.environ.get("GEMMA_BOT_TOKEN", "")
 MAX_BODY_BYTES = _env_int("GEMMA_MAX_BODY_BYTES", 16384)
 
-# Gemma-Talk Voice Server / Bridge
-GEMMA_TALK_WS_URL = os.environ.get("GEMMA_TALK_WS_URL", "ws://localhost:8000/ws")
-GEMMA_TALK_DIR = Path(os.environ.get("GEMMA_TALK_DIR", str(Path.home() / "Documents" / "gemma-talk")))
+# Voice Server & Web UI (integrated pipeline)
+VOICE_SERVER_HOST = os.environ.get("GEMMA_VOICE_HOST", "0.0.0.0")
+VOICE_SERVER_PORT = _env_int("GEMMA_VOICE_PORT", 8000)
+VOICE_CLIENT_PORT = _env_int("GEMMA_VOICE_CLIENT_PORT", 5173)
+VOICE_MODELS_DIR = Path(os.environ.get("GEMMA_MODELS_DIR", str(REPO_ROOT / "voice_server" / "models")))
+VOICE_AUDIO_SAMPLE_RATE = _env_int("GEMMA_AUDIO_SAMPLE_RATE", 16000)
+VOICE_AUDIO_CHUNK_SAMPLES = _env_int("GEMMA_AUDIO_CHUNK_SAMPLES", 512)
+VOICE_VAD_THRESHOLD = _env_float("GEMMA_VAD_THRESHOLD", 0.35)
+VOICE_VAD_SILENCE_MS = _env_int("GEMMA_VAD_SILENCE_MS", 400)
+VOICE_STT_ENGINE = os.environ.get("GEMMA_STT_ENGINE", "ai4bharat")
+VOICE_INDIC_LANG = os.environ.get("GEMMA_INDIC_LANG", "te")
+VOICE_WHISPER_MODEL = os.environ.get("GEMMA_WHISPER_MODEL", "small")
+VOICE_WHISPER_DEVICE = os.environ.get("GEMMA_WHISPER_DEVICE", "cpu")
+VOICE_WHISPER_COMPUTE_TYPE = os.environ.get("GEMMA_WHISPER_COMPUTE_TYPE", "int8")
+VOICE_WHISPER_CPU_THREADS = _env_int("GEMMA_WHISPER_CPU_THREADS", 4)
+VOICE_WHISPER_LANGUAGE = os.environ.get("GEMMA_WHISPER_LANGUAGE", "") or None
+VOICE_TTS_VOICE = os.environ.get("GEMMA_VOICE_TTS_VOICE", "af_heart")
+VOICE_TTS_SPEED = _env_float("GEMMA_VOICE_TTS_SPEED", 1.0)
+VOICE_TTS_SAMPLE_RATE = 24000
+VOICE_SYSTEM_PROMPT = os.environ.get(
+    "GEMMA_VOICE_SYSTEM_PROMPT",
+    (
+        "You are Gemma-Bot, a friendly, expressive, and natural conversational desktop companion. "
+        "Respond naturally and concisely in 1-3 sentences (supporting English, Telugu, or Tanglish as the user speaks), "
+        "avoiding markdown, bullet points, asterisks, emojis, and code blocks unless requested."
+    ),
+)
+
+# Voice Server Bridge WebSocket URL (subscribes to /ws/events on voice_server)
+GEMMA_TALK_WS_URL = os.environ.get("GEMMA_TALK_WS_URL", f"ws://127.0.0.1:{VOICE_SERVER_PORT}/ws/events")
 
 # Paths
 WORLD_PATH = Path(os.environ.get("GEMMA_WORLD_PATH", str(REPO_ROOT / "worlds" / "gemma_bot.wbt")))
@@ -84,6 +111,10 @@ SARVAM_TTS_MODEL = os.environ.get("GEMMA_SARVAM_TTS_MODEL", "bulbul:v3")
 SARVAM_TTS_SPEAKER = os.environ.get("GEMMA_SARVAM_TTS_SPEAKER", "shubh")
 SARVAM_TTS_LANGUAGE = os.environ.get("GEMMA_SARVAM_TTS_LANGUAGE", "en-IN")
 SARVAM_TTS_TIMEOUT_SECONDS = _env_float("GEMMA_SARVAM_TTS_TIMEOUT", 5.0)
+VOICE_TTS_ENGINE = os.environ.get(
+    "GEMMA_VOICE_TTS_ENGINE",
+    "sarvam" if SARVAM_API_KEY else "kokoro",
+).lower().strip()
 
 # Intent Parser / LLM configuration
 INTENT_PROVIDER = os.environ.get(
