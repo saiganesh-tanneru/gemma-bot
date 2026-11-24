@@ -2,6 +2,13 @@
 
 All notable changes to **Gemma-Bot** are documented in this file by phase.
 
+## Phase 3 — Controller Structure & Refactor (`refactor/phase-3-structure`)
+- **Modularized Controller**: Split `gemma_bot_controller.py` into `faces/` (`themes.py`, `renderer.py`), `gestures.py`, `state.py`, `server.py`, and `input_map.py` so the OLED renderer is importable without Webots or starting the HTTP server.
+- **Unified Phase-Based Gesture Registry**: Collapsed duplicated gesture duration/trajectory `if/elif` chains into a single `GESTURES` registry (`Gesture(frames, trajectory(p))` with `p = t / total in [0, 1]`), replacing hardcoded frame offsets (`t < 40`, `t - 18`, etc.) with phase math.
+- **Data-Driven Keyboard Mapping**: Replaced the ~120-line keyboard `if/elif` ladder with a declarative `KEYMAP` table in `input_map.py`.
+- **Shared README Renderer**: Updated `scripts/generate_readme_assets.py` to import `FaceRenderer`, `CanvasTarget`, and `SCREEN_THEMES` directly from `faces/` instead of re-implementing them.
+- **Golden-Master Tests**: Captured `tests/golden_master.json` (all 19 gesture trajectories + all 15 mood render hashes) before refactoring and verified exact behavior preservation in `tests/test_phase3_structure.py`.
+
 ## Phase 2 — Hygiene & Configuration (`chore/phase-2-hygiene`)
 - **Git & Packaging**: Untracked committed `__pycache__/gemma_talk_bridge.cpython-311.pyc`, updated `.gitignore` (`.env`, `.env.*` excluding `.env.example`, `.venv/`, `.pytest_cache/`, `logs/`, `*.pyc`), added pinned `requirements.txt` and `requirements-dev.txt`, and removed the runtime `pip install websockets` call from `gemma_talk_bridge.py`.
 - **License**: Added MIT `LICENSE` (with placeholder `[COPYRIGHT HOLDER]` pending owner confirmation).
