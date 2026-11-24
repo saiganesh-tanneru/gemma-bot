@@ -26,6 +26,7 @@ from controller import Robot, Keyboard
 COMMAND_QUEUE = queue.Queue()
 ROBOT_STATE = {
     "mood": "NEUTRAL",
+    "gesture": None,
     "yaw": 0.0,
     "pitch": 0.0,
     "gaze": [0.0, 0.0],
@@ -81,6 +82,35 @@ def resolve_mood(val):
         if char in s:
             return mood
     return "NEUTRAL"
+
+# Default complementary facial expressions for physical gestures
+GESTURE_DEFAULT_MOOD = {
+    "curious": "THINKING",
+    "tilt": "THINKING",
+    "confused": "THINKING",
+    "ponder": "THINKING",
+    "perk_up": "SURPRISED",
+    "alert": "SURPRISED",
+    "peek_a_boo": "SURPRISED",
+    "droop": "SLEEPY",
+    "yawn": "SLEEPY",
+    "nod": "HAPPY",
+    "bounce": "STAR_EYES",
+    "hop": "STAR_EYES",
+    "cheer": "STAR_EYES",
+    "celebrate": "STAR_EYES",
+    "groove": "COOL",
+    "dance": "COOL",
+    "shiver": "CRYING",
+    "tremble": "CRYING",
+    "shy": "LOVE",
+    "bashful": "LOVE",
+    "dizzy_spin": "DIZZY",
+    "swirl": "DIZZY",
+    "orbital": "DIZZY",
+    "wiggle": "HAPPY",
+    "bow": "HAPPY",
+}
 
 class AICommandHandler(http.server.BaseHTTPRequestHandler):
     """HTTP handler to receive external AI commands and report robot status."""
@@ -560,7 +590,6 @@ class GemmaBotCompanion:
                 if "state" in cmd:
                     state = str(cmd["state"]).upper()
                     if state == "LISTENING":
-                        self.mood = "NEUTRAL"
                         self.gaze_x = 0.0
                         self.gaze_y = 0.0
                         self.target_yaw = 0.0
@@ -619,7 +648,12 @@ class GemmaBotCompanion:
 
                 # 4. Trigger Gesture
                 if "gesture" in cmd and cmd["gesture"]:
-                    self.trigger_gesture(cmd["gesture"])
+                    g_name = str(cmd["gesture"]).lower().strip()
+                    self.trigger_gesture(g_name)
+                    # Automatically set matching expressive mood if none explicitly passed
+                    if "mood" not in cmd and g_name in GESTURE_DEFAULT_MOOD:
+                        self.mood = GESTURE_DEFAULT_MOOD[g_name]
+                        self.trigger_blink()
 
                 # 5. Handle Speech Text & Audible Talk-back
                 if "speech" in cmd and cmd["speech"]:
@@ -638,6 +672,7 @@ class GemmaBotCompanion:
 
     def update_animation(self):
         """Updates head servo positions, gestures, blinks, and timers."""
+        self.idle_timer += 1
         # 1. Blink cycle
         if self.is_blinking:
             self.blink_progress += self.blink_speed
@@ -864,6 +899,7 @@ class GemmaBotCompanion:
 
         # Update global state for HTTP reporting
         ROBOT_STATE["mood"] = self.mood
+        ROBOT_STATE["gesture"] = self.active_gesture
         ROBOT_STATE["yaw"] = round(self.cur_yaw, 3)
         ROBOT_STATE["pitch"] = round(self.cur_pitch, 3)
         ROBOT_STATE["gaze"] = [round(self.gaze_x, 2), round(self.gaze_y, 2)]

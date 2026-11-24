@@ -56,8 +56,7 @@ def parse_natural_language_intent(prompt):
     """
     p = prompt.lower().strip()
     action = {
-        "thought": prompt,
-        "mood": "NEUTRAL"
+        "thought": prompt
     }
 
     # 1. Gaze & Direction
@@ -72,17 +71,34 @@ def parse_natural_language_intent(prompt):
     elif "look at me" in p or "center" in p or "forward" in p:
         action["gaze"] = "center"
 
-    # 2. Specific Gestures
-    if any(w in p for w in ["bounce", "hop", "jump"]):
+    # 2. Specific Physical Gestures
+    if any(w in p for w in ["curious", "tilt head", "inquisitive"]):
+        action["gesture"] = "curious"
+        action["mood"] = "THINKING"
+        action["speech"] = "Hmm, interesting!"
+    elif any(w in p for w in ["perk up", "perk_up", "perk", "attentive", "alert"]):
+        action["gesture"] = "perk_up"
+        action["mood"] = "SURPRISED"
+        action["speech"] = "I'm listening!"
+    elif any(w in p for w in ["droop", "slump"]):
+        action["gesture"] = "droop"
+        action["mood"] = "SLEEPY"
+        action["speech"] = "So sleepy..."
+    elif any(w in p for w in ["tilt left", "lean left"]):
+        action["gesture"] = "tilt_left"
+    elif any(w in p for w in ["tilt right", "lean right"]):
+        action["gesture"] = "tilt_right"
+    elif any(w in p for w in ["bounce", "hop", "jump"]):
         action["gesture"] = "bounce"
-        action["mood"] = "HAPPY"
+        action["mood"] = "STAR_EYES"
         action["speech"] = "Boing! Boing!"
     elif any(w in p for w in ["groove", "dance", "boogie"]):
         action["gesture"] = "groove"
         action["mood"] = "COOL"
         action["speech"] = "Grooving to the beat!"
-    elif any(w in p for w in ["shiver", "tremble", "cold", "nervous"]):
+    elif any(w in p for w in ["shiver", "tremble", "quiver", "cold", "nervous"]):
         action["gesture"] = "shiver"
+        action["mood"] = "CRYING"
         action["speech"] = "Brrr... so cold!"
     elif any(w in p for w in ["scan", "look around", "search", "survey"]):
         action["gesture"] = "scan"
@@ -106,87 +122,76 @@ def parse_natural_language_intent(prompt):
         action["gesture"] = "peek_a_boo"
         action["mood"] = "SURPRISED"
         action["speech"] = "Peek-a-boo! I see you!"
-    elif any(w in p for w in ["spin", "swirl", "orbit"]):
+    elif any(w in p for w in ["spin", "swirl", "orbit", "dizzy spin"]):
         action["gesture"] = "dizzy_spin"
         action["mood"] = "DIZZY"
         action["speech"] = "Round and round we go!"
-    elif any(w in p for w in ["tilt left"]):
-        action["gesture"] = "tilt_left"
-    elif any(w in p for w in ["tilt right"]):
-        action["gesture"] = "tilt_right"
     elif any(w in p for w in ["confused", "puzzled"]):
         action["gesture"] = "confused"
         action["mood"] = "THINKING"
         action["speech"] = "I'm a little confused..."
-
-    # 3. Gestures & Moods / Emojis
-    elif any(w in p for w in ["wink", "😉", "flirt"]):
-        action["mood"] = "WINK"
-        action["speech"] = "Wink wink!"
-    elif any(w in p for w in ["cool", "sunglasses", "shades", "😎"]):
-        action["mood"] = "COOL"
-        action["speech"] = "Stay cool!"
-    elif any(w in p for w in ["star", "excited", "wow", "sparkle", "🤩", "✨"]):
-        action["mood"] = "STAR_EYES"
-        action["gesture"] = "perk_up"
-        action["speech"] = "Amazing!"
-    elif any(w in p for w in ["plead", "puppy", "beg", "please", "🥺"]):
-        action["mood"] = "PLEADING"
-        action["speech"] = "Pretty please?"
-    elif any(w in p for w in ["cry", "sad", "tear", "sob", "😭", "😢"]):
-        action["mood"] = "CRYING"
-        action["gesture"] = "droop"
-        action["speech"] = "Sniff... I am sad."
-    elif any(w in p for w in ["dizzy", "ko", "confused", "spin", "😵"]):
-        action["mood"] = "DIZZY"
-        action["gesture"] = "shake"
-        action["speech"] = "Whoa, my head is spinning!"
-    elif any(w in p for w in ["tongue", "silly", "playful", "😋", "😜"]):
-        action["mood"] = "TONGUE"
-        action["gesture"] = "wiggle"
-        action["speech"] = "Blep!"
-    elif any(w in p for w in ["smirk", "sly", "mischief", "😏"]):
-        action["mood"] = "SMIRK"
-        action["speech"] = "Heh, you know it."
-    elif any(w in p for w in ["love", "heart", "cute", "kiss", "adore", "😍", "❤️", "🥰"]):
-        action["mood"] = "LOVE"
-        action["gesture"] = "wiggle"
-        action["speech"] = "I love you!"
     elif any(w in p for w in ["nod", "yes", "agree"]):
         action["gesture"] = "nod"
         action["mood"] = "HAPPY"
         action["speech"] = "Yes, absolutely!"
     elif any(w in p for w in ["shake", "no", "disagree"]):
         action["gesture"] = "shake"
-        action["mood"] = "NEUTRAL"
         action["speech"] = "No, I don't think so."
-    elif any(w in p for w in ["sleep", "tired", "goodnight", "nap", "😴"]):
-        action["mood"] = "SLEEPY"
-        action["gesture"] = "droop"
-        action["speech"] = "Goodnight... Zzz"
-    elif any(w in p for w in ["surprised", "omg", "shocked", "alert", "😮", "😲"]):
-        action["mood"] = "SURPRISED"
-        action["gesture"] = "perk_up"
-        action["speech"] = "Whoa!"
-    elif any(w in p for w in ["angry", "mad", "grumpy", "furious", "😡"]):
-        action["mood"] = "ANGRY"
-        action["speech"] = "Hmph!"
-    elif any(w in p for w in ["think", "ponder", "calculate", "question", "why", "🤔"]):
-        action["mood"] = "THINKING"
-        action["gesture"] = "curious"
-        action["speech"] = "Hmm, let me think..."
-    elif any(w in p for w in ["joke", "funny"]):
-        action["mood"] = "HAPPY"
+    elif any(w in p for w in ["wiggle", "shimmy"]):
         action["gesture"] = "wiggle"
-        action["speech"] = "Why did the robot go on vacation? To recharge its batteries!"
-    elif any(w in p for w in ["happy", "smile", "laugh", "pet", "wiggle", "dance", "😀", "😊"]):
         action["mood"] = "HAPPY"
-        action["gesture"] = "wiggle"
-        action["speech"] = "Hehe, happy to be here!"
-    elif any(w in p for w in ["hello", "hi", "hey"]):
-        action["mood"] = "HAPPY"
-        action["gesture"] = "nod"
-        action["speech"] = "Hello! I am Gemma-Bot!"
+        action["speech"] = "Wiggle wiggle!"
+
+    # 3. Specific Moods & Emojis (if not already assigned by gesture)
+    if "mood" not in action:
+        if any(w in p for w in ["cool", "sunglasses", "shades", "😎"]):
+            action["mood"] = "COOL"
+            action["speech"] = "Stay cool!"
+        elif any(w in p for w in ["star", "excited", "sparkle", "🤩", "✨"]):
+            action["mood"] = "STAR_EYES"
+            action["speech"] = "Amazing!"
+        elif any(w in p for w in ["plead", "puppy", "beg", "please", "🥺"]):
+            action["mood"] = "PLEADING"
+            action["speech"] = "Pretty please?"
+        elif any(w in p for w in ["cry", "sad", "tear", "sob", "😭", "😢"]):
+            action["mood"] = "CRYING"
+            action["speech"] = "Sniff... I am sad."
+        elif any(w in p for w in ["wink", "😉", "flirt"]):
+            action["mood"] = "WINK"
+            action["speech"] = "Wink wink!"
+        elif any(w in p for w in ["tongue", "silly", "playful", "😋", "😜"]):
+            action["mood"] = "TONGUE"
+            action["speech"] = "Blep!"
+        elif any(w in p for w in ["love", "heart", "cute", "kiss", "adore", "😍", "❤️", "🥰"]):
+            action["mood"] = "LOVE"
+            action["speech"] = "I love you!"
+        elif any(w in p for w in ["dizzy", "ko", "😵"]):
+            action["mood"] = "DIZZY"
+            action["speech"] = "Whoa, my head is spinning!"
+        elif any(w in p for w in ["smirk", "sly", "mischief", "😏"]):
+            action["mood"] = "SMIRK"
+            action["speech"] = "Heh, you know it."
+        elif any(w in p for w in ["happy", "smile", "laugh", "pet", "😀", "😊"]):
+            action["mood"] = "HAPPY"
+            action["speech"] = "Hehe, happy to be here!"
+        elif any(w in p for w in ["surprised", "wow", "omg", "shocked", "😮", "😲"]):
+            action["mood"] = "SURPRISED"
+            action["speech"] = "Whoa!"
+        elif any(w in p for w in ["sleep", "tired", "goodnight", "nap", "😴"]):
+            action["mood"] = "SLEEPY"
+            action["speech"] = "Goodnight... Zzz"
+        elif any(w in p for w in ["angry", "mad", "grumpy", "furious", "😡"]):
+            action["mood"] = "ANGRY"
+            action["speech"] = "Hmph!"
+        elif any(w in p for w in ["think", "ponder", "calculate", "why", "🤔"]):
+            action["mood"] = "THINKING"
+            action["speech"] = "Hmm, let me think..."
+        elif any(w in p for w in ["neutral", "calm", "😐"]):
+            action["mood"] = "NEUTRAL"
+        elif any(w in p for w in ["hello", "hi", "hey"]):
+            action["mood"] = "HAPPY"
+            action["gesture"] = "nod"
+            action["speech"] = "Hello! I am Gemma-Bot!"
 
     return action
 
