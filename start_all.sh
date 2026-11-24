@@ -134,14 +134,10 @@ else
 fi
 
 # ------------------------------------------------------------------------------
-# 4. Launch Gemma-Talk <-> Gemma-Bot Bridge
+# 4. Synchronize Voice Pipeline with Robot Body
 # ------------------------------------------------------------------------------
-echo -e "\n${BOLD}[4/5] Launching Real-Time Robot Voice & Gesture Bridge...${NC}"
-"$PYTHON_BIN" "$BOT_DIR/gemma_talk_bridge.py" &
-BRIDGE_PID=$!
-PIDS+=("$BRIDGE_PID")
-sleep 1
-echo -e "${GREEN}✓ Bridge active (synchronizing moods, mouth lip-sync, and barge-in)${NC}"
+echo -e "\n${BOLD}[4/5] Synchronizing Voice Pipeline with Robot Body...${NC}"
+echo -e "${GREEN}✓ Real-time direct pipeline active (moods, lip-sync, and barge-in)${NC}"
 
 # ------------------------------------------------------------------------------
 # 5. Launch Gemma-Talk Web UI & Open Browser

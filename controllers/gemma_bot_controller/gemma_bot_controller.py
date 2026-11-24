@@ -298,7 +298,7 @@ class GemmaBotCompanion:
             bar_w = int(abs(math.sin(mouth_phase * 0.9)) * 24) + 10
             self.draw_filled_box(self.disp_w/2 - bar_w/2, 59, bar_w, 2, self.eye_color)
 
-    def trigger_speech(self, text):
+    def trigger_speech(self, text, play_audio=True):
         """Speaks text out loud and activates animated lip-sync."""
         if not text:
             return
@@ -316,15 +316,16 @@ class GemmaBotCompanion:
         est_seconds = max(1.6, words * 0.38 + 0.6)
         self.speech_timer = int((est_seconds * 1000) / max(1, self.timestep))
 
-        # Launch native macOS TTS asynchronously
-        try:
-            self.speech_process = subprocess.Popen(
-                ["say", "-v", "Samantha", self.speech_text],
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL
-            )
-        except Exception as e:
-            print(f"[TTS Audio Error]: {e}")
+        # Launch native macOS TTS asynchronously if play_audio is True
+        if play_audio:
+            try:
+                self.speech_process = subprocess.Popen(
+                    ["say", "-v", "Samantha", self.speech_text],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL
+                )
+            except Exception as e:
+                print(f"[TTS Audio Error]: {e}")
         print(f"🗣️ Gemma-Bot: \"{self.speech_text}\"")
 
     def interrupt_speech(self):
@@ -439,7 +440,8 @@ class GemmaBotCompanion:
 
                 # 5. Handle Speech Text & Audible Talk-back
                 if "speech" in cmd and cmd["speech"]:
-                    self.trigger_speech(cmd["speech"])
+                    play_audio = bool(cmd.get("audio", True))
+                    self.trigger_speech(cmd["speech"], play_audio=play_audio)
 
                 print(f"[AI Command Executed] Mood={self.mood}, Gesture={cmd.get('gesture')}, State={cmd.get('state')}")
             except Exception as e:
