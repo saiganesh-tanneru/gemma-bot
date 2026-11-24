@@ -6,16 +6,16 @@ EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/project
 
 WorldInfo {
   basicTimeStep 16
-  title "Jamiryo Desktop Buddy"
+  title "Gemma-Bot Desktop Companion"
   info [
-    "Jamiryo: An expressive desktop companion robot with animated OLED eyes, a servo head, camera, and touch sensor."
+    "Gemma-Bot: An expressive desktop companion robot with animated OLED eyes, a servo head, camera, and touch sensor."
   ]
 }
 
 Viewpoint {
   orientation 1 0 0 1.570796
   position 0 -0.40 0.14
-  follow "Jamiryo"
+  follow "Gemma-Bot"
 }
 
 TexturedBackground {
@@ -41,7 +41,7 @@ SolidBox {
 # Jamiryo Robot (Anchored static base - completely upright and cannot tilt)
 Robot {
   translation 0 0 0
-  name "Jamiryo"
+  name "Gemma-Bot"
   children [
     # Static Grounded Base (Standing vertically along Z from 0 to 0.07)
     DEF BASE_SHAPE Pose {
@@ -286,5 +286,5 @@ Robot {
       }
     ]
   }
-  controller "jamiryo_controller"
+  controller "gemma_bot_controller"
 }

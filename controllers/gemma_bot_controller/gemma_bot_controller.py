@@ -1,5 +1,5 @@
 """
-Jamiryo Desktop Companion Controller for Webots
+Gemma-Bot Desktop Companion Controller for Webots
 Features:
 - Real-time animated OLED eyes rendered on a 128x64 Webots Display device.
 - Dual-axis servo head motion (Yaw / Pan and Pitch / Tilt).
@@ -11,7 +11,7 @@ import math
 import random
 from controller import Robot, Keyboard
 
-class JamiryoCompanion:
+class Gemma-BotCompanion:
     def __init__(self):
         self.robot = Robot()
         self.timestep = int(self.robot.getBasicTimeStep())
@@ -82,7 +82,7 @@ class JamiryoCompanion:
         
         # Print instructions
         print("=" * 60)
-        print("🤖 Jamiryo Desktop Companion Simulator Initialized!")
+        print("🤖 Gemma-Bot Desktop Companion Simulator Initialized!")
         print("Controls:")
         print("  [1] Neutral / Idle     [2] Happy Mode")
         print("  [3] Surprised Mode     [4] Sleepy Mode")
@@ -311,5 +311,5 @@ class JamiryoCompanion:
             self.render_face()
 
 if __name__ == "__main__":
-    companion = JamiryoCompanion()
+    companion = Gemma-BotCompanion()
     companion.run()
