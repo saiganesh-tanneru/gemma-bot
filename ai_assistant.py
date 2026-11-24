@@ -72,8 +72,55 @@ def parse_natural_language_intent(prompt):
     elif "look at me" in p or "center" in p or "forward" in p:
         action["gaze"] = "center"
 
-    # 2. Gestures & Moods / Emojis
-    if any(w in p for w in ["wink", "😉", "flirt"]):
+    # 2. Specific Gestures
+    if any(w in p for w in ["bounce", "hop", "jump"]):
+        action["gesture"] = "bounce"
+        action["mood"] = "HAPPY"
+        action["speech"] = "Boing! Boing!"
+    elif any(w in p for w in ["groove", "dance", "boogie"]):
+        action["gesture"] = "groove"
+        action["mood"] = "COOL"
+        action["speech"] = "Grooving to the beat!"
+    elif any(w in p for w in ["shiver", "tremble", "cold", "nervous"]):
+        action["gesture"] = "shiver"
+        action["speech"] = "Brrr... so cold!"
+    elif any(w in p for w in ["scan", "look around", "search", "survey"]):
+        action["gesture"] = "scan"
+        action["speech"] = "Scanning the surroundings..."
+    elif any(w in p for w in ["bow", "respect", "curtsy"]):
+        action["gesture"] = "bow"
+        action["speech"] = "At your service!"
+    elif any(w in p for w in ["cheer", "celebrate", "hooray", "hurray"]):
+        action["gesture"] = "cheer"
+        action["mood"] = "STAR_EYES"
+        action["speech"] = "Hooray! Congratulations!"
+    elif any(w in p for w in ["yawn"]):
+        action["gesture"] = "yawn"
+        action["mood"] = "SLEEPY"
+        action["speech"] = "Yaaawn..."
+    elif any(w in p for w in ["shy", "bashful", "blush"]):
+        action["gesture"] = "shy"
+        action["mood"] = "LOVE"
+        action["speech"] = "Aw, thank you..."
+    elif any(w in p for w in ["peek a boo", "peekaboo", "hide and seek"]):
+        action["gesture"] = "peek_a_boo"
+        action["mood"] = "SURPRISED"
+        action["speech"] = "Peek-a-boo! I see you!"
+    elif any(w in p for w in ["spin", "swirl", "orbit"]):
+        action["gesture"] = "dizzy_spin"
+        action["mood"] = "DIZZY"
+        action["speech"] = "Round and round we go!"
+    elif any(w in p for w in ["tilt left"]):
+        action["gesture"] = "tilt_left"
+    elif any(w in p for w in ["tilt right"]):
+        action["gesture"] = "tilt_right"
+    elif any(w in p for w in ["confused", "puzzled"]):
+        action["gesture"] = "confused"
+        action["mood"] = "THINKING"
+        action["speech"] = "I'm a little confused..."
+
+    # 3. Gestures & Moods / Emojis
+    elif any(w in p for w in ["wink", "😉", "flirt"]):
         action["mood"] = "WINK"
         action["speech"] = "Wink wink!"
     elif any(w in p for w in ["cool", "sunglasses", "shades", "😎"]):

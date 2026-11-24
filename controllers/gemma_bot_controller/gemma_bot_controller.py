@@ -506,7 +506,7 @@ class GemmaBotCompanion:
             self.blink_progress = 0.0
 
     def trigger_gesture(self, gesture_name):
-        """Triggers a named physical head gesture."""
+        """Triggers a named physical head gesture with trajectory dynamics."""
         name = gesture_name.lower().strip()
         self.active_gesture = name
         self.gesture_frame = 0
@@ -514,16 +514,42 @@ class GemmaBotCompanion:
             self.gesture_total_frames = 60
         elif name in ("shake", "no", "shake_head"):
             self.gesture_total_frames = 70
-        elif name in ("wiggle", "dance"):
+        elif name in ("wiggle",):
             self.gesture_total_frames = 80
         elif name in ("curious", "tilt"):
             self.gesture_total_frames = 60
+        elif name in ("tilt_left", "lean_left"):
+            self.gesture_total_frames = 55
+        elif name in ("tilt_right", "lean_right"):
+            self.gesture_total_frames = 55
         elif name in ("perk_up", "alert"):
             self.gesture_total_frames = 45
-        elif name in ("droop", "bow"):
+        elif name in ("droop",):
             self.gesture_total_frames = 60
+        elif name in ("bounce", "hop"):
+            self.gesture_total_frames = 50
+        elif name in ("groove", "dance"):
+            self.gesture_total_frames = 90
+        elif name in ("shiver", "tremble", "quiver"):
+            self.gesture_total_frames = 60
+        elif name in ("scan", "look_around", "search"):
+            self.gesture_total_frames = 100
+        elif name in ("confused", "ponder"):
+            self.gesture_total_frames = 80
+        elif name in ("bow", "respect"):
+            self.gesture_total_frames = 70
+        elif name in ("cheer", "celebrate"):
+            self.gesture_total_frames = 70
+        elif name in ("yawn",):
+            self.gesture_total_frames = 80
+        elif name in ("shy", "bashful"):
+            self.gesture_total_frames = 65
+        elif name in ("peek_a_boo", "hide"):
+            self.gesture_total_frames = 85
+        elif name in ("dizzy_spin", "swirl", "orbital"):
+            self.gesture_total_frames = 90
         else:
-            self.gesture_total_frames = 40
+            self.gesture_total_frames = 50
 
     def process_ai_commands(self):
         """Drains the AI command queue and executes actions."""
@@ -649,7 +675,7 @@ class GemmaBotCompanion:
                 # Smooth head shake left & right
                 self.target_yaw = math.sin(t * 0.25) * 0.35
                 self.target_pitch = 0.0
-            elif self.active_gesture in ("wiggle", "dance"):
+            elif self.active_gesture in ("wiggle",):
                 # Happy wiggle
                 self.target_yaw = math.sin(t * 0.3) * 0.25
                 self.target_pitch = -0.15 + abs(math.sin(t * 0.2)) * 0.1
@@ -658,12 +684,94 @@ class GemmaBotCompanion:
                 self.target_yaw = 0.35
                 self.target_pitch = -0.1
                 self.gaze_x = -0.5
+            elif self.active_gesture in ("tilt_left", "lean_left"):
+                self.target_yaw = 0.45
+                self.target_pitch = -0.08
+                self.gaze_x = -0.8
+            elif self.active_gesture in ("tilt_right", "lean_right"):
+                self.target_yaw = -0.45
+                self.target_pitch = -0.08
+                self.gaze_x = 0.8
             elif self.active_gesture in ("perk_up", "alert"):
                 self.target_pitch = -0.25
                 self.target_yaw = 0.0
-            elif self.active_gesture in ("droop", "bow"):
+                self.gaze_y = -0.6
+            elif self.active_gesture in ("droop",):
                 self.target_pitch = 0.35
                 self.target_yaw = 0.0
+                self.gaze_y = 0.6
+            elif self.active_gesture in ("bounce", "hop"):
+                # Fast energetic vertical bobbing
+                self.target_pitch = -0.18 + math.sin(t * 0.4) * 0.18
+                self.target_yaw = math.sin(t * 0.2) * 0.08
+                self.gaze_y = -0.6
+            elif self.active_gesture in ("groove", "dance"):
+                # Smooth figure-8 dance
+                self.target_yaw = math.sin(t * 0.18) * 0.38
+                self.target_pitch = math.sin(t * 0.36) * 0.16
+                self.gaze_x = math.sin(t * 0.18) * 0.7
+            elif self.active_gesture in ("shiver", "tremble", "quiver"):
+                # High-frequency micro-jitter
+                self.target_yaw = math.sin(t * 1.8) * 0.07
+                self.target_pitch = 0.14 + math.cos(t * 1.5) * 0.05
+                self.gaze_y = 0.4
+            elif self.active_gesture in ("scan", "look_around", "search"):
+                # Wide sweeping panoramic room scan
+                self.target_yaw = math.sin(t * 0.07) * 0.85
+                self.target_pitch = -0.05 + math.cos(t * 0.14) * 0.08
+                self.gaze_x = math.sin(t * 0.07) * 0.95
+            elif self.active_gesture in ("confused", "ponder"):
+                # Puzzled alternating tilt
+                if t < 40:
+                    self.target_yaw = 0.42
+                    self.target_pitch = -0.1
+                    self.gaze_x = -0.7
+                else:
+                    self.target_yaw = -0.42
+                    self.target_pitch = -0.05
+                    self.gaze_x = 0.7
+            elif self.active_gesture in ("bow", "respect"):
+                # Deep polite formal bow
+                if t < 35:
+                    self.target_pitch = (t / 35.0) * 0.38
+                else:
+                    self.target_pitch = ((70 - t) / 35.0) * 0.38
+                self.target_yaw = 0.0
+                self.gaze_y = 0.8
+            elif self.active_gesture in ("cheer", "celebrate"):
+                # Joyful head toss back with happy shakes
+                self.target_pitch = -0.32 + math.sin(t * 0.3) * 0.08
+                self.target_yaw = math.sin(t * 0.4) * 0.25
+                self.gaze_y = -0.85
+            elif self.active_gesture in ("yawn",):
+                # Stretching upward then relaxing slump
+                if t < 45:
+                    self.target_pitch = -0.28 * (t / 45.0)
+                    self.gaze_y = -0.7
+                else:
+                    self.target_pitch = 0.25 * ((t - 45) / 35.0)
+                    self.gaze_y = 0.5
+            elif self.active_gesture in ("shy", "bashful"):
+                # Turn away and tuck down
+                self.target_yaw = -0.45
+                self.target_pitch = 0.24
+                self.gaze_x = -0.8
+                self.gaze_y = 0.6
+            elif self.active_gesture in ("peek_a_boo", "hide"):
+                if t < 45:
+                    self.target_pitch = 0.38
+                    self.blink_progress = 1.0
+                    self.target_yaw = 0.0
+                else:
+                    self.target_pitch = -0.25
+                    self.blink_progress = 0.0
+                    self.target_yaw = math.sin(t * 0.3) * 0.15
+            elif self.active_gesture in ("dizzy_spin", "swirl", "orbital"):
+                # Circular orbital head roll
+                self.target_yaw = math.sin(t * 0.18) * 0.35
+                self.target_pitch = math.cos(t * 0.18) * 0.22
+                self.gaze_x = math.sin(t * 0.18) * 0.8
+                self.gaze_y = math.cos(t * 0.18) * 0.8
 
             if self.gesture_frame >= total:
                 self.active_gesture = None
@@ -778,6 +886,55 @@ class GemmaBotCompanion:
             elif key in (ord('S'), ord('s')):
                 self.mood = "SMIRK"
                 print("Mood -> SMIRK 😏")
+            # --- Physical Gesture Triggers ---
+            elif key in (ord('N'), ord('n')):
+                self.trigger_gesture("nod")
+                print("Gesture -> NOD")
+            elif key in (ord('H'), ord('h')):
+                self.trigger_gesture("shake")
+                print("Gesture -> SHAKE")
+            elif key in (ord('B'), ord('b')):
+                self.trigger_gesture("bounce")
+                print("Gesture -> BOUNCE")
+            elif key in (ord('G'), ord('g')):
+                self.trigger_gesture("groove")
+                print("Gesture -> GROOVE / DANCE")
+            elif key in (ord('V'), ord('v')):
+                self.trigger_gesture("shiver")
+                print("Gesture -> SHIVER / TREMBLE")
+            elif key in (ord('R'), ord('r')):
+                self.trigger_gesture("scan")
+                print("Gesture -> SCAN / LOOK AROUND")
+            elif key in (ord('P'), ord('p')):
+                self.trigger_gesture("perk_up")
+                print("Gesture -> PERK UP")
+            elif key in (ord('Y'), ord('y')):
+                self.trigger_gesture("yawn")
+                print("Gesture -> YAWN")
+            elif key in (ord('O'), ord('o')):
+                self.trigger_gesture("bow")
+                print("Gesture -> BOW")
+            elif key in (ord('U'), ord('u')):
+                self.trigger_gesture("confused")
+                print("Gesture -> CONFUSED TILT")
+            elif key in (ord('Z'), ord('z')):
+                self.trigger_gesture("dizzy_spin")
+                print("Gesture -> DIZZY SPIN")
+            elif key in (ord('J'), ord('j')):
+                self.trigger_gesture("cheer")
+                print("Gesture -> CHEER / CELEBRATE")
+            elif key in (ord('K'), ord('k')):
+                self.trigger_gesture("shy")
+                print("Gesture -> SHY / BASHFUL")
+            elif key in (ord('Q'), ord('q')):
+                self.trigger_gesture("peek_a_boo")
+                print("Gesture -> PEEK-A-BOO")
+            elif key == ord('['):
+                self.trigger_gesture("tilt_left")
+                print("Gesture -> TILT LEFT")
+            elif key == ord(']'):
+                self.trigger_gesture("tilt_right")
+                print("Gesture -> TILT RIGHT")
             elif key == Keyboard.LEFT:
                 self.target_yaw = min(1.2, self.target_yaw + 0.2)
                 self.gaze_x = -0.9

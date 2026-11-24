@@ -20,9 +20,21 @@ A complete Webots simulation of **Gemma-Bot**, an expressive desktop companion r
   - `nod`: Double nodding agreement up and down.
   - `shake`: Shaking head left and right (disagreement).
   - `wiggle`: Happy companion shimmy.
-  - `curious` / `tilt`: Inquisitive head tilt.
-  - `perk_up`: Sudden attentive head rise.
-  - `droop`: Sleepy or sad bow.
+  - `curious` / `tilt`: Inquisitive head tilt with angled eye gaze.
+  - `tilt_left` / `tilt_right`: Sustained curious head tilt to either side.
+  - `perk_up`: Attentive upward head motion for surprises.
+  - `droop`: Sleepy or sad head drop forward.
+  - `bounce` / `hop`: Fast vertical energetic bobbing.
+  - `groove` / `dance`: Figure-8 rhythmic head dance.
+  - `shiver` / `tremble`: High-frequency micro-jitter (cold/nervous/crying).
+  - `scan` / `look_around`: Smooth panoramic room scan with wide sweeping gaze.
+  - `confused`: Puzzled alternating tilt left and right.
+  - `bow`: Polite formal bow forward and rise.
+  - `cheer` / `celebrate`: Head tossed back in joy with happy shakes.
+  - `yawn`: Slow upward stretch then relaxing forward slump.
+  - `shy` / `bashful`: Head turns away and tucks down.
+  - `peek_a_boo`: Dips down with closed eyes then energetically pops up!
+  - `dizzy_spin`: Smooth orbital circular head roll.
 - **Embedded HTTP Command Server**: The Webots controller runs an HTTP REST endpoint on `http://127.0.0.1:8765/command` to accept commands from any external AI agent, script, or web app.
 - **Autonomous Idle Life**: Automatically glances around the room and blinks naturally when idle.
 
@@ -113,11 +125,11 @@ curl -X POST http://127.0.0.1:8765/command \
 ### Supported JSON Parameters:
 | Parameter | Type | Options / Values |
 | :--- | :--- | :--- |
-| `mood` | string | `"NEUTRAL"`, `"HAPPY"`, `"SURPRISED"`, `"SLEEPY"`, `"ANGRY"`, `"THINKING"`, `"LOVE"` |
-| `gesture` | string | `"nod"`, `"shake"`, `"wiggle"`, `"curious"`, `"perk_up"`, `"droop"` |
+| `mood` | string / emoji | `"NEUTRAL"`, `"HAPPY"`, `"COOL"`, `"STAR_EYES"`, `"PLEADING"`, `"CRYING"`, `"WINK"`, `"TONGUE"`, `"LOVE"`, `"DIZZY"`, `"SMIRK"`, `"SURPRISED"`, `"SLEEPY"`, `"ANGRY"`, `"THINKING"` (or raw emojis: `😎`, `🤩`, `🥺`, `😭`, `😉`, `😋`, `😍`, `😵`, `😏`, `😀`, `😮`, `😴`, `😡`, `🤔`) |
+| `gesture` | string | `"nod"`, `"shake"`, `"wiggle"`, `"curious"`, `"tilt_left"`, `"tilt_right"`, `"perk_up"`, `"droop"`, `"bounce"`, `"groove"`, `"shiver"`, `"scan"`, `"confused"`, `"bow"`, `"cheer"`, `"yawn"`, `"shy"`, `"peek_a_boo"`, `"dizzy_spin"` |
 | `gaze` | string | `"left"`, `"right"`, `"up"`, `"down"`, `"center"` |
 | `look_at` | array `[yaw, pitch]` | e.g. `[0.4, -0.2]` (custom servo angles) |
-| `speech` | string | Spoken dialogue printed to console & animated on OLED display |
+| `speech` | string | Spoken dialogue printed to console, spoken out loud, & animated on OLED display |
 
 ---
 
@@ -125,13 +137,44 @@ curl -X POST http://127.0.0.1:8765/command \
 
 Click into the 3D Webots viewport and use your keyboard:
 
-| Key | Mode / Action | Behavior |
-| :--- | :--- | :--- |
-| `1` | **Neutral** | Natural random blinks and organic idle gaze |
-| `2` or `SPACE` | **Happy / Pet** | Squinting smiling eyes (`^_^`) and joyful head wiggle |
-| `3` | **Surprised** | Wide round eyes and head perks straight up |
-| `4` | **Sleepy** | Drooping eyelids, head droops forward, breathing Zzz |
-| `5` | **Angry** | Slanted expressive brows |
-| `6` | **Thinking** | Looking up-right with animated thinking dots |
-| `←` / `→` | **Pan Head** | Manually steer servo head left or right |
-| `↑` / `↓` | **Tilt Head** | Manually tilt servo head up or down |
+### Face Emojis:
+| Key | Emoji / Mood | Expression |
+| :---: | :--- | :--- |
+| `1` | **Neutral 😐** | Natural random blinks and organic idle gaze |
+| `2` | **Happy 😀** | Squinting smiling eyes (`^_^`) and bright smile |
+| `3` | **Surprised 😮** | Wide round eyes and 'O' mouth |
+| `4` | **Sleepy 😴** | Drooping eyelids, resting slump, floating Zzz |
+| `5` | **Angry 😡** | Inward slanted aggressive brows |
+| `6` | **Thinking 🤔** | Looking up-right with cycling thinking dots |
+| `7` | **Love 😍** | Glowing pixel heart eyes and pink companion smile |
+| `8` | **Cool 😎** | Pixelated sunglasses with white gloss reflection streaks and smirk |
+| `9` | **Star Eyes 🤩** | Twinkling 4-point yellow star eyes with shiny centers |
+| `0` | **Pleading 🥺** | Giant sparkly anime puppy eyes with specular highlights |
+| `W` | **Wink 😉** | One open rounded eye, one winking smile arc |
+| `C` | **Crying 😭** | Sad drooping eyes with animated flowing blue teardrops |
+| `T` | **Tongue 😋** | Squinting happy eyes with cute pink tongue |
+| `D` | **Dizzy 😵** | Cross `X_X` eyes and wavy mouth |
+| `S` | **Smirk 😏** | Asymmetric eyebrow, sly side glance and smirk |
+
+### Physical Head Gestures:
+| Key | Gesture | Motion Description |
+| :---: | :--- | :--- |
+| `N` | **Nod** | Smooth double nodding agreement up & down |
+| `H` | **Shake** | Head shaking left & right (disagreement) |
+| `B` | **Bounce** | Fast vertical energetic bobbing |
+| `G` | **Groove / Dance** | Smooth figure-8 head groove |
+| `V` | **Shiver / Tremble** | High-frequency micro-jitter (cold or nervous) |
+| `R` | **Scan / Search** | Sweeping panoramic room scan with wide gaze |
+| `P` | **Perk Up** | Sudden attentive upward head rise |
+| `Y` | **Yawn** | Stretching upward tilt then relaxing slump |
+| `O` | **Bow** | Polite formal bow forward |
+| `U` | **Confused** | Puzzled alternating tilt left and right |
+| `Z` | **Dizzy Spin** | Smooth orbital circular head roll |
+| `J` | **Cheer** | Head tossed back in joy with happy shakes |
+| `K` | **Shy** | Head turns away and tucks down |
+| `Q` | **Peek-a-Boo** | Dips head with closed eyes, then pops up! |
+| `[` | **Tilt Left** | Sustained curious head tilt left |
+| `]` | **Tilt Right** | Sustained curious head tilt right |
+| `SPACE` | **Pet / Wiggle** | Joyful companion shimmy |
+| `←` / `→` | **Pan Head** | Manual servo pan left/right |
+| `↑` / `↓` | **Tilt Head** | Manual servo tilt up/down |
