@@ -23,6 +23,11 @@ class JamiryoCompanion:
         self.pitch_motor = self.robot.getDevice("head_pitch")
         self.touch = self.robot.getDevice("head_touch")
         
+        # Hide 2D floating HUD window overlay so the focus is 100% on the 3D robot face
+        self.show_2d_overlay = False
+        if self.display:
+            self.display.setOpacity(0.0)
+        
         # Enable devices
         if self.camera:
             self.camera.enable(self.timestep * 2)
@@ -280,6 +285,10 @@ class JamiryoCompanion:
             elif key == ord('5'):
                 self.mood = "ANGRY"
                 print("Mood -> ANGRY")
+            elif key == ord('o') or key == ord('O'):
+                self.show_2d_overlay = not self.show_2d_overlay
+                self.display.setOpacity(1.0 if self.show_2d_overlay else 0.0)
+                print(f"2D HUD Overlay: {'ON' if self.show_2d_overlay else 'OFF'}")
             elif key == Keyboard.LEFT:
                 self.target_yaw = max(-1.2, self.target_yaw - 0.2)
                 self.gaze_x = -0.9
