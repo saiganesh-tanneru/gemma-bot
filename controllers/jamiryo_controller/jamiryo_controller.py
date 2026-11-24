@@ -23,12 +23,11 @@ class JamiryoCompanion:
         self.pitch_motor = self.robot.getDevice("head_pitch")
         self.touch = self.robot.getDevice("head_touch")
         
-        # Hide 2D floating HUD window overlay so the focus is 100% on the 3D robot face
-        self.show_2d_overlay = False
+        # Ensure display is fully opaque so graphics render brightly
         if self.display:
-            self.display.setOpacity(0.0)
-        
-        # Enable devices
+            self.display.setOpacity(1.0)
+            self.display.setAlpha(1.0)
+            
         if self.camera:
             self.camera.enable(self.timestep * 2)
         if self.touch:
@@ -49,20 +48,20 @@ class JamiryoCompanion:
         self.target_yaw = 0.0
         self.target_pitch = 0.0
         
-        # Display settings
+        # Display resolution & high-contrast colors
         self.disp_w = 128
         self.disp_h = 64
-        self.bg_color = 0x05070E      # Deep OLED black
+        self.bg_color = 0x000000      # True OLED black
         self.eye_color = 0x00E5FF     # Electric Cyan / OLED Blue
-        self.eye_dim = 0x008899       # Secondary glow / dimming
+        self.eye_dim = 0x008899       # Glow / edge shading
         self.mouth_color = 0x00BBDD
         
         # Eye baseline geometry
-        self.left_cx = 40
-        self.right_cx = 88
+        self.left_cx = 38
+        self.right_cx = 90
         self.base_cy = 32
-        self.eye_w = 26
-        self.eye_h = 32
+        self.eye_w = 28
+        self.eye_h = 34
         
         # Dynamic eye state
         self.gaze_x = 0.0   # -1.0 (left) to +1.0 (right)
@@ -75,8 +74,11 @@ class JamiryoCompanion:
         self.mood = "NEUTRAL"
         self.mood_timer = 0
         self.idle_timer = 0
-        self.next_idle_action = 120
-        self.next_blink = 180
+        self.next_idle_action = 100
+        self.next_blink = 140
+        
+        # Render initial frame immediately
+        self.render_face()
         
         # Print instructions
         print("=" * 60)
@@ -134,7 +136,6 @@ class JamiryoCompanion:
         x = cx - w / 2
         y = cy - h / 2
         self.draw_filled_box(x, y, w, h, self.eye_color)
-        # Angled slice
         if is_left:
             self.draw_filled_box(x + w/2, y, w/2, h * 0.45, self.bg_color)
         else:
@@ -142,7 +143,11 @@ class JamiryoCompanion:
 
     def render_face(self):
         """Renders the complete OLED facial expression and eye gaze."""
-        # 1. Clear background
+        if not self.display:
+            return
+            
+        # 1. Clear background with solid black
+        self.display.setOpacity(1.0)
         self.display.setColor(self.bg_color)
         self.display.fillRectangle(0, 0, self.disp_w, self.disp_h)
 
@@ -161,25 +166,23 @@ class JamiryoCompanion:
 
         # 4. Render eyes according to mood
         if self.blink_progress > 0.85:
-            # Fully closed blink slit
-            self.draw_filled_box(lcx - self.eye_w/2, cy, self.eye_w, 3, self.eye_color)
-            self.draw_filled_box(rcx - self.eye_w/2, cy, self.eye_w, 3, self.eye_color)
+            # Closed blink slit
+            self.draw_filled_box(lcx - self.eye_w/2, cy, self.eye_w, 4, self.eye_color)
+            self.draw_filled_box(rcx - self.eye_w/2, cy, self.eye_w, 4, self.eye_color)
         elif self.mood == "HAPPY":
             self.draw_happy_eye(lcx, cy, self.eye_w)
             self.draw_happy_eye(rcx, cy, self.eye_w)
-            # Small smiling mouth
+            # Smiling mouth
             self.draw_filled_box(self.disp_w/2 - 6, cy + 16, 12, 3, self.mouth_color)
             self.draw_filled_box(self.disp_w/2 - 3, cy + 19, 6, 2, self.mouth_color)
         elif self.mood == "SLEEPY":
             self.draw_sleepy_eye(lcx, cy + 4, self.eye_w)
             self.draw_sleepy_eye(rcx, cy + 4, self.eye_w)
-            # Gentle breathing Zzz
             if (self.idle_timer // 30) % 2 == 0:
                 self.display.setColor(self.eye_dim)
                 self.display.drawText("z", 108, 14)
                 self.display.drawText("Z", 114, 8)
         elif self.mood == "SURPRISED":
-            # Extra wide open round eyes
             w = self.eye_w + 4
             h = effective_h + 6
             self.draw_rounded_eye(lcx, cy - 2, w, h, corner_r=8)
@@ -201,12 +204,12 @@ class JamiryoCompanion:
 
     def update_animation(self):
         """Updates eye blinks, saccades, and mood timers."""
-        # Handle blink animation cycle
+        # Blink animation
         if self.is_blinking:
             self.blink_progress += self.blink_speed
             if self.blink_progress >= 1.0:
                 self.blink_progress = 1.0
-                self.blink_speed = -0.22  # Open eye
+                self.blink_speed = -0.22
             elif self.blink_progress <= 0.0:
                 self.blink_progress = 0.0
                 self.is_blinking = False
@@ -225,37 +228,31 @@ class JamiryoCompanion:
             if self.next_idle_action <= 0:
                 choice = random.random()
                 if choice < 0.35:
-                    # Look center
                     self.gaze_x = 0.0
                     self.gaze_y = 0.0
                     self.target_yaw = 0.0
                     self.target_pitch = 0.0
                 elif choice < 0.65:
-                    # Glance left
                     self.gaze_x = -0.75
+                    self.gaze_y = random.uniform(-0.3, 0.3)
+                    self.target_yaw = random.uniform(0.2, 0.6)  # positive yaw = turn toward left
+                    self.target_pitch = self.gaze_y * 0.2
+                else:
+                    self.gaze_x = 0.75
                     self.gaze_y = random.uniform(-0.3, 0.3)
                     self.target_yaw = random.uniform(-0.6, -0.2)
                     self.target_pitch = self.gaze_y * 0.2
-                else:
-                    # Glance right
-                    self.gaze_x = 0.75
-                    self.gaze_y = random.uniform(-0.3, 0.3)
-                    self.target_yaw = random.uniform(0.2, 0.6)
-                    self.target_pitch = self.gaze_y * 0.2
                 self.next_idle_action = random.randint(100, 240)
         elif self.mood == "HAPPY":
-            # Happy head wiggle
             wiggle = math.sin(self.idle_timer * 0.2) * 0.15
             self.target_yaw = wiggle
             self.target_pitch = -0.15 + abs(math.sin(self.idle_timer * 0.15)) * 0.1
         elif self.mood == "SLEEPY":
-            # Head droops forward and stays calm
             self.target_yaw = 0.0
             self.target_pitch = 0.35
             self.gaze_x = 0.0
             self.gaze_y = 0.5
         elif self.mood == "SURPRISED":
-            # Head perks upward
             self.target_pitch = -0.25
 
         # Smooth servo interpolation
@@ -285,15 +282,11 @@ class JamiryoCompanion:
             elif key == ord('5'):
                 self.mood = "ANGRY"
                 print("Mood -> ANGRY")
-            elif key == ord('o') or key == ord('O'):
-                self.show_2d_overlay = not self.show_2d_overlay
-                self.display.setOpacity(1.0 if self.show_2d_overlay else 0.0)
-                print(f"2D HUD Overlay: {'ON' if self.show_2d_overlay else 'OFF'}")
             elif key == Keyboard.LEFT:
-                self.target_yaw = max(-1.2, self.target_yaw - 0.2)
+                self.target_yaw = min(1.2, self.target_yaw + 0.2)
                 self.gaze_x = -0.9
             elif key == Keyboard.RIGHT:
-                self.target_yaw = min(1.2, self.target_yaw + 0.2)
+                self.target_yaw = max(-1.2, self.target_yaw - 0.2)
                 self.gaze_x = 0.9
             elif key == Keyboard.UP:
                 self.target_pitch = max(-0.4, self.target_pitch - 0.1)

@@ -13,8 +13,8 @@ WorldInfo {
 }
 
 Viewpoint {
-  orientation 1 0 0 1.5084
-  position 0 -0.32 0.11
+  orientation 1 0 0 1.570796
+  position 0 -0.40 0.14
   follow "Jamiryo"
 }
 
@@ -26,7 +26,7 @@ TexturedBackgroundLight {
   luminosity 1.2
 }
 
-# Desk Surface (Stationary table)
+# Desk Surface (Stationary table, top at Z = 0)
 SolidBox {
   translation 0 0 -0.02
   name "desk"
@@ -38,14 +38,15 @@ SolidBox {
   }
 }
 
-# Jamiryo Robot (Anchored static base - cannot tilt or tip over)
+# Jamiryo Robot (Anchored static base - completely upright and cannot tilt)
 Robot {
   translation 0 0 0
   name "Jamiryo"
   children [
-    # Static Grounded Base (Orange body + dark rubber base ring)
+    # Static Grounded Base (Standing vertically along Z from 0 to 0.07)
     DEF BASE_SHAPE Pose {
       translation 0 0 0.035
+      rotation 1 0 0 1.57079632679
       children [
         Shape {
           appearance DEF ORANGE_BODY PBRAppearance {
@@ -58,25 +59,28 @@ Robot {
             radius 0.048
           }
         }
-        Pose {
-          translation 0 0 -0.032
-          children [
-            Shape {
-              appearance PBRAppearance {
-                baseColor 0.15 0.15 0.16
-                roughness 0.5
-              }
-              geometry Cylinder {
-                height 0.01
-                radius 0.05
-              }
-            }
-          ]
+      ]
+    }
+
+    # Rubber Foot Ring at base
+    Pose {
+      translation 0 0 0.005
+      rotation 1 0 0 1.57079632679
+      children [
+        Shape {
+          appearance PBRAppearance {
+            baseColor 0.15 0.15 0.16
+            roughness 0.5
+          }
+          geometry Cylinder {
+            height 0.01
+            radius 0.05
+          }
         }
       ]
     }
 
-    # Head Pan (Yaw) Joint - Rotates left/right around Z axis
+    # Head Pan (Yaw) Joint - Rotates left/right around vertical Z axis
     HingeJoint {
       jointParameters HingeJointParameters {
         axis 0 0 1
@@ -97,9 +101,10 @@ Robot {
       endPoint Solid {
         translation 0 0 0.07
         children [
-          # Neck bracket
+          # Neck bracket (Standing vertically along Z from 0.07 to 0.10)
           Pose {
             translation 0 0 0.015
+            rotation 1 0 0 1.57079632679
             children [
               Shape {
                 appearance PBRAppearance {
@@ -114,11 +119,11 @@ Robot {
             ]
           }
 
-          # Head Tilt (Pitch) Joint - Tilts up/down around X axis
+          # Head Tilt (Pitch) Joint - Tilts up/down around horizontal X axis
           HingeJoint {
             jointParameters HingeJointParameters {
               axis 1 0 0
-              anchor 0 0 0.035
+              anchor 0 0 0.03
               minStop -0.45
               maxStop 0.45
             }
@@ -133,11 +138,11 @@ Robot {
               }
             ]
             endPoint Solid {
-              translation 0 0 0.035
+              translation 0 0 0.03
               children [
-                # Main Head Housing (Orange)
+                # Main Head Housing (Orange Box)
                 DEF HEAD_HOUSING Pose {
-                  translation 0 0 0.035
+                  translation 0 0 0.045
                   children [
                     Shape {
                       appearance USE ORANGE_BODY
@@ -148,9 +153,9 @@ Robot {
                   ]
                 }
 
-                # Dark Curved Visor Faceplate
+                # Dark Curved Visor Faceplate (facing -Y toward user)
                 Pose {
-                  translation 0 -0.0405 0.035
+                  translation 0 -0.0405 0.045
                   children [
                     Shape {
                       appearance PBRAppearance {
@@ -165,9 +170,9 @@ Robot {
                   ]
                 }
 
-                # OLED Display Face (128x64 pixels mapped directly to front face)
+                # OLED Display Face (128x64 pixels on front visor)
                 DEF OLED_DISPLAY Display {
-                  translation 0 -0.0425 0.033
+                  translation 0 -0.0425 0.043
                   children [
                     Shape {
                       appearance PBRAppearance {
@@ -212,7 +217,7 @@ Robot {
 
                 # Camera (forehead centered, looking forward at user)
                 Camera {
-                  translation 0 -0.041 0.062
+                  translation 0 -0.041 0.072
                   rotation 1 0 0 -1.570796
                   name "camera"
                   width 160
@@ -222,7 +227,8 @@ Robot {
 
                 # Capacitive Touch Sensor (Head Pat on top)
                 TouchSensor {
-                  translation 0 0 0.074
+                  translation 0 0 0.085
+                  rotation 1 0 0 1.57079632679
                   children [
                     Shape {
                       appearance PBRAppearance {
@@ -239,7 +245,7 @@ Robot {
                 }
               ]
               boundingObject Pose {
-                translation 0 0 0.035
+                translation 0 0 0.045
                 children [
                   Box {
                     size 0.095 0.08 0.075
@@ -255,6 +261,7 @@ Robot {
         ]
         boundingObject Pose {
           translation 0 0 0.015
+          rotation 1 0 0 1.57079632679
           children [
             Cylinder {
               height 0.03
@@ -271,6 +278,7 @@ Robot {
   ]
   boundingObject Pose {
     translation 0 0 0.035
+    rotation 1 0 0 1.57079632679
     children [
       Cylinder {
         height 0.07
