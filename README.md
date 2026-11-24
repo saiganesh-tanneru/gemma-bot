@@ -12,6 +12,9 @@ A complete Webots simulation of **Gemma-Bot**, an expressive desktop companion r
 ## ✨ Features
 
 - **AI Command Integration (`ai_assistant.py`)**: Send natural language commands (or structured JSON) directly from your terminal or an LLM/Gemini to control gestures, moods, gaze, and speech in real-time.
+- **Audible Talk-Back & Lip-Sync**: Gemma-Bot speaks out loud with native voice synthesis and synchronizes an animated talking mouth on its OLED display with conversational micro-nodding.
+- **Whisper-Quiet Servos**: Motor whining sounds are completely muted via `sound ""` configuration for clean, silent motion.
+- **Gemma-Talk Voice Assistant Bridge (`gemma_talk_bridge.py`)**: Seamlessly connects to your local `gemma-talk` voice assistant (Silero VAD, faster-whisper, Ollama gemma, Kokoro-82M TTS) so Gemma-Bot acts as the physical companion embodiment for your voice conversations!
 - **Expressive OLED Eyes**: Animated in real-time on a 128×64 pixel display with natural blinks, saccades, and multiple emotional states (`HAPPY`, `SURPRISED`, `SLEEPY`, `ANGRY`, `THINKING`, `LOVE`, `NEUTRAL`).
 - **Physical Gesture Engine**:
   - `nod`: Double nodding agreement up and down.
@@ -53,6 +56,28 @@ python3 ai_assistant.py -i
 # Check live robot telemetry:
 python3 ai_assistant.py --status
 ```
+
+---
+
+## 🎙️ Reusing with Gemma-Talk (Voice Assistant Companion)
+
+Gemma-Bot integrates directly with **Gemma-Talk** (`/Users/saiganeshtanneru/Documents/gemma-talk`), transforming your local voice assistant into an expressive physical desktop buddy:
+
+1. **Start Gemma-Talk Backend Server**:
+   ```bash
+   cd /Users/saiganeshtanneru/Documents/gemma-talk
+   ./start-server.sh
+   ```
+2. **Start the Bridge in Gemma-Bot**:
+   ```bash
+   cd /Users/saiganeshtanneru/Documents/GitHub/robots/gemma-bot
+   python3 gemma_talk_bridge.py
+   ```
+3. **Open Gemma-Talk in your browser** (`http://localhost:3000` or client).
+   - When you speak, Gemma-Bot enters **LISTENING** mode (head perks up, eyes focus).
+   - When Ollama generates the response, Gemma-Bot enters **THINKING** mode (curious head tilt, eyes look up with thinking dots).
+   - When Kokoro synthesizes speech, Gemma-Bot enters **SPEAKING** mode (animated lip-sync, happy smile, conversational nodding).
+   - When you interrupt (barge-in), Gemma-Bot instantly silences speech, halts its mouth, and blinks attentively!
 
 ---
 

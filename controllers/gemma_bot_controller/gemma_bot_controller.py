@@ -17,6 +17,9 @@ import queue
 import threading
 import json
 import http.server
+import subprocess
+import os
+import sys
 from controller import Robot, Keyboard
 
 # Thread-safe queue for incoming AI commands
@@ -144,9 +147,10 @@ class GemmaBotCompanion:
         self.next_idle_action = 100
         self.next_blink = 140
         
-        # Speech state
+        # Speech state & audio process
         self.speech_text = ""
         self.speech_timer = 0
+        self.speech_process = None
         
         # Gesture engine state
         self.active_gesture = None
@@ -285,10 +289,55 @@ class GemmaBotCompanion:
             self.draw_rounded_eye(lcx, cy, self.eye_w, effective_h, corner_r=6)
             self.draw_rounded_eye(rcx, cy, self.eye_w, effective_h, corner_r=6)
 
-        # 5. Speech indicator (subtle audio bar on bottom)
+        # 5. Speech indicator & dynamic lip-sync mouth
         if self.speech_timer > 0:
-            bar_w = int(abs(math.sin(self.speech_timer * 0.4)) * 24) + 8
-            self.draw_filled_box(self.disp_w/2 - bar_w/2, 58, bar_w, 2, self.eye_color)
+            mouth_phase = self.speech_timer * 0.4
+            mouth_w = 12 + int(abs(math.cos(mouth_phase * 0.7)) * 8)
+            mouth_h = 4 + int(abs(math.sin(mouth_phase)) * 8)
+            self.draw_filled_box(self.disp_w/2 - mouth_w/2, cy + 16 - mouth_h/2, mouth_w, mouth_h, self.mouth_color)
+            bar_w = int(abs(math.sin(mouth_phase * 0.9)) * 24) + 10
+            self.draw_filled_box(self.disp_w/2 - bar_w/2, 59, bar_w, 2, self.eye_color)
+
+    def trigger_speech(self, text):
+        """Speaks text out loud and activates animated lip-sync."""
+        if not text:
+            return
+        self.speech_text = str(text).strip()
+        # Kill previous speech process if still running (instant barge-in cutoff)
+        if self.speech_process and self.speech_process.poll() is None:
+            try:
+                self.speech_process.terminate()
+            except Exception:
+                pass
+            self.speech_process = None
+
+        # Estimate duration in frames (~32ms timestep)
+        words = len(self.speech_text.split())
+        est_seconds = max(1.6, words * 0.38 + 0.6)
+        self.speech_timer = int((est_seconds * 1000) / max(1, self.timestep))
+
+        # Launch native macOS TTS asynchronously
+        try:
+            self.speech_process = subprocess.Popen(
+                ["say", "-v", "Samantha", self.speech_text],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL
+            )
+        except Exception as e:
+            print(f"[TTS Audio Error]: {e}")
+        print(f"🗣️ Gemma-Bot: \"{self.speech_text}\"")
+
+    def interrupt_speech(self):
+        """Immediately silences speech playback and halts lip-sync."""
+        if self.speech_process and self.speech_process.poll() is None:
+            try:
+                self.speech_process.terminate()
+            except Exception:
+                pass
+        self.speech_process = None
+        self.speech_timer = 0
+        self.speech_text = ""
+        self.trigger_blink()
 
     def trigger_blink(self):
         """Initiates a blink sequence."""
@@ -321,14 +370,41 @@ class GemmaBotCompanion:
         while not COMMAND_QUEUE.empty():
             try:
                 cmd = COMMAND_QUEUE.get_nowait()
-                # 1. Update Mood
+                # 0. High-level Session State Transitions (Gemma-Talk compatibility)
+                if "state" in cmd:
+                    state = str(cmd["state"]).upper()
+                    if state == "LISTENING":
+                        self.mood = "NEUTRAL"
+                        self.gaze_x = 0.0
+                        self.gaze_y = 0.0
+                        self.target_yaw = 0.0
+                        self.target_pitch = -0.05
+                    elif state == "THINKING":
+                        self.mood = "THINKING"
+                        self.gaze_x = 0.5
+                        self.gaze_y = -0.6
+                        self.target_yaw = 0.2
+                        self.target_pitch = -0.15
+                    elif state == "SPEAKING":
+                        self.mood = "HAPPY"
+                        if not self.active_gesture:
+                            self.trigger_gesture("nod")
+                    elif state in ("INTERRUPTED", "CANCELLED"):
+                        self.interrupt_speech()
+                        self.mood = "SURPRISED"
+
+                # 1. Instant Interruption / Barge-in trigger
+                if cmd.get("interrupt") or cmd.get("flush"):
+                    self.interrupt_speech()
+
+                # 2. Update Mood
                 if "mood" in cmd:
                     mood_str = str(cmd["mood"]).upper()
                     if mood_str in ("NEUTRAL", "HAPPY", "SURPRISED", "SLEEPY", "ANGRY", "THINKING", "LOVE"):
                         self.mood = mood_str
                         self.trigger_blink()
 
-                # 2. Update Gaze / Look At
+                # 3. Update Gaze / Look At
                 if "gaze" in cmd:
                     g = str(cmd["gaze"]).lower()
                     if g == "left":
@@ -357,17 +433,15 @@ class GemmaBotCompanion:
                         self.gaze_x = max(-1.0, min(1.0, self.target_yaw * 1.5))
                         self.gaze_y = max(-1.0, min(1.0, self.target_pitch * 2.0))
 
-                # 3. Trigger Gesture
-                if "gesture" in cmd:
+                # 4. Trigger Gesture
+                if "gesture" in cmd and cmd["gesture"]:
                     self.trigger_gesture(cmd["gesture"])
 
-                # 4. Handle Speech Text
+                # 5. Handle Speech Text & Audible Talk-back
                 if "speech" in cmd and cmd["speech"]:
-                    self.speech_text = str(cmd["speech"])
-                    self.speech_timer = 90  # Display for ~1.5 seconds
-                    print(f"🗣️ Gemma-Bot: \"{self.speech_text}\"")
+                    self.trigger_speech(cmd["speech"])
 
-                print(f"[AI Command Executed] Mood={self.mood}, Gesture={cmd.get('gesture')}")
+                print(f"[AI Command Executed] Mood={self.mood}, Gesture={cmd.get('gesture')}, State={cmd.get('state')}")
             except Exception as e:
                 print(f"[AI Command Error]: {e}")
 
@@ -390,9 +464,11 @@ class GemmaBotCompanion:
             self.trigger_blink()
             self.next_blink = random.randint(120, 260)
 
-        # Speech timer
+        # Speech timer & conversational micro-nodding
         if self.speech_timer > 0:
             self.speech_timer -= 1
+            if not self.active_gesture:
+                self.target_pitch = math.sin(self.speech_timer * 0.22) * 0.08
 
         # 2. Gesture execution (overrides normal head target if active)
         if self.active_gesture:

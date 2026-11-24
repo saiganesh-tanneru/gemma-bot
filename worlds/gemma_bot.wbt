@@ -91,6 +91,7 @@ Robot {
       device [
         RotationalMotor {
           name "head_yaw"
+          sound ""
           maxVelocity 4.0
           maxTorque 1.5
         }
@@ -130,6 +131,7 @@ Robot {
             device [
               RotationalMotor {
                 name "head_pitch"
+                sound ""
                 maxVelocity 3.5
                 maxTorque 1.5
               }
