@@ -167,6 +167,31 @@ curl -X POST http://127.0.0.1:8765/command \
 
 ---
 
+## 🍓 Raspberry Pi Zero Thin-Client LAN Setup
+
+To control Gemma-Bot from a Raspberry Pi Zero (or any other host on your LAN) while Webots/the controller runs on your workstation:
+
+1. **Generate a shared token** (never commit it; keep it in `.env` or shell environment):
+   ```bash
+   export GEMMA_BOT_TOKEN="$(python3 -c 'import secrets; print(secrets.token_urlsafe(32))')"
+   ```
+2. **On the host running the controller**, bind all interfaces with the token set (the server refuses to bind `0.0.0.0` without `GEMMA_BOT_TOKEN`):
+   ```bash
+   export GEMMA_BOT_HOST=0.0.0.0
+   export GEMMA_BOT_PORT=8765
+   export GEMMA_BOT_TOKEN="<your-token>"
+   ```
+   Restrict port `8765` in your host firewall to your local LAN subnet.
+3. **On the Raspberry Pi Zero thin client**, point the client or bridge to the host's LAN IP and pass the same token:
+   ```bash
+   export GEMMA_BOT_URL="http://<host-lan-ip>:8765"
+   export GEMMA_BOT_TOKEN="<your-token>"
+   python3 ai_assistant.py "nod yes and smile"
+   ```
+   Direct `curl` requests must include `-H "X-Bot-Token: $GEMMA_BOT_TOKEN"`. Oversized payloads (> `GEMMA_MAX_BODY_BYTES`, default 16 KB) return `413`, invalid JSON/types return `400`, and missing/invalid tokens return `401`.
+
+---
+
 ## 🎮 Manual Keyboard Controls
 
 Click into the 3D Webots viewport and use your keyboard:

@@ -30,11 +30,18 @@ import config
 
 SERVER_URL = config.BOT_BASE_URL
 
+def _auth_headers(extra=None):
+    headers = dict(extra or {})
+    if config.BOT_AUTH_TOKEN:
+        headers["X-Bot-Token"] = config.BOT_AUTH_TOKEN
+    return headers
+
+
 def send_command(cmd_dict):
     """Sends a JSON command dict to Gemma-Bot in Webots."""
     url = f"{SERVER_URL}/command"
     data = json.dumps(cmd_dict).encode("utf-8")
-    req = urllib.request.Request(url, data=data, headers={"Content-Type": "application/json"})
+    req = urllib.request.Request(url, data=data, headers=_auth_headers({"Content-Type": "application/json"}))
     try:
         with urllib.request.urlopen(req, timeout=config.CLI_COMMAND_TIMEOUT_SECONDS) as resp:
             return json.loads(resp.read().decode("utf-8"))
@@ -46,8 +53,9 @@ def send_command(cmd_dict):
 def get_robot_status():
     """Gets the current status of Gemma-Bot from Webots."""
     url = f"{SERVER_URL}/status"
+    req = urllib.request.Request(url, headers=_auth_headers())
     try:
-        with urllib.request.urlopen(url, timeout=config.CLI_STATUS_TIMEOUT_SECONDS) as resp:
+        with urllib.request.urlopen(req, timeout=config.CLI_STATUS_TIMEOUT_SECONDS) as resp:
             return json.loads(resp.read().decode("utf-8"))
     except Exception:
         return None

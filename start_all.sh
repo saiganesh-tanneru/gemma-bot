@@ -58,6 +58,14 @@ BOT_BASE_URL="$(_cfg 'config.BOT_BASE_URL')"
 WORLD_PATH="$(_cfg 'str(config.WORLD_PATH)')"
 mkdir -p "$LOG_DIR"
 
+_check_bot_status() {
+    if [ -n "${GEMMA_BOT_TOKEN:-}" ]; then
+        curl -sf -H "X-Bot-Token: $GEMMA_BOT_TOKEN" "$BOT_STATUS_URL" > /dev/null 2>&1
+    else
+        curl -sf "$BOT_STATUS_URL" > /dev/null 2>&1
+    fi
+}
+
 # Color styles
 BOLD="\033[1m"
 GREEN="\033[0;32m"
@@ -146,7 +154,7 @@ fi
 # 2. Launch Webots Simulation
 # ------------------------------------------------------------------------------
 echo -e "\n${BOLD}[2/5] Launching Webots Simulation (Gemma-Bot)...${NC}"
-if curl -s "$BOT_STATUS_URL" > /dev/null 2>&1; then
+if _check_bot_status; then
     echo -e "${GREEN}✓ Gemma-Bot simulation is already running in Webots!${NC}"
 else
     echo "Starting Webots in real-time mode..."
@@ -156,7 +164,7 @@ else
 
     echo "Waiting for Gemma-Bot AI controller to initialize..."
     for i in {1..30}; do
-        if curl -s "$BOT_STATUS_URL" > /dev/null 2>&1; then
+        if _check_bot_status; then
             break
         fi
         sleep 0.5

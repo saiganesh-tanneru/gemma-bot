@@ -50,6 +50,7 @@ BOT_STATUS_URL = f"{BOT_BASE_URL}/status"
 
 # Optional shared secret for HTTP command authentication (used in Phase 4)
 BOT_AUTH_TOKEN = os.environ.get("GEMMA_BOT_TOKEN", "")
+MAX_BODY_BYTES = _env_int("GEMMA_MAX_BODY_BYTES", 16384)
 
 # Gemma-Talk Voice Server / Bridge
 GEMMA_TALK_WS_URL = os.environ.get("GEMMA_TALK_WS_URL", "ws://localhost:8000/ws")

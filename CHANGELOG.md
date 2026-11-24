@@ -2,6 +2,13 @@
 
 All notable changes to **Gemma-Bot** are documented in this file by phase.
 
+## Phase 4 — Security & Server Hardening (`feat/phase-4-security`)
+- **Multi-threaded HTTP Server**: Upgraded `HTTPServer` to `BotCommandHTTPServer(ThreadingHTTPServer)` with `daemon_threads = True`.
+- **Payload Limits & Schema Validation**: Enforced `Content-Length` checks and `MAX_BODY_BYTES` (default 16 KB, returning `413`), plus strict JSON object & field type validation (returning `400`).
+- **Token Authentication & Safe Binding**: Added constant-time `X-Bot-Token` (`hmac.compare_digest`) checks on `POST /command` and `GET /status` when `GEMMA_BOT_TOKEN` is set (returning `401` on mismatch), kept `127.0.0.1` as default bind host, and refused non-loopback binds (`0.0.0.0`) unless `GEMMA_BOT_TOKEN` is set.
+- **Client & Docs**: Wired `X-Bot-Token` into `ai_assistant.py`, `gemma_talk_bridge.py`, and `start_all.sh`, and documented Raspberry Pi Zero LAN setup in `README.md`.
+- **Tests**: Added `tests/test_phase4_security.py` covering `401`, `413`, `400`, `200`, `ThreadingHTTPServer`, and non-loopback bind guard.
+
 ## Phase 3 — Controller Structure & Refactor (`refactor/phase-3-structure`)
 - **Modularized Controller**: Split `gemma_bot_controller.py` into `faces/` (`themes.py`, `renderer.py`), `gestures.py`, `state.py`, `server.py`, and `input_map.py` so the OLED renderer is importable without Webots or starting the HTTP server.
 - **Unified Phase-Based Gesture Registry**: Collapsed duplicated gesture duration/trajectory `if/elif` chains into a single `GESTURES` registry (`Gesture(frames, trajectory(p))` with `p = t / total in [0, 1]`), replacing hardcoded frame offsets (`t < 40`, `t - 18`, etc.) with phase math.

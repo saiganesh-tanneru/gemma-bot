@@ -91,6 +91,13 @@ class WebotsHealth:
         return (time.monotonic() if now is None else now) >= self.next_probe_at
 
 
+def _auth_headers(extra=None):
+    headers = dict(extra or {})
+    if config.BOT_AUTH_TOKEN:
+        headers["X-Bot-Token"] = config.BOT_AUTH_TOKEN
+    return headers
+
+
 def send_bot_command(
     payload,
     health: Optional[WebotsHealth] = None,
@@ -102,7 +109,7 @@ def send_bot_command(
         req = urllib.request.Request(
             BOT_COMMAND_URL,
             data=data,
-            headers={"Content-Type": "application/json"},
+            headers=_auth_headers({"Content-Type": "application/json"}),
         )
         with urllib.request.urlopen(req, timeout=timeout) as resp:
             result = json.loads(resp.read().decode("utf-8"))
@@ -133,7 +140,8 @@ def check_webots_health(
 ) -> bool:
     """Probes Webots /status endpoint and updates health state."""
     try:
-        with urllib.request.urlopen(BOT_STATUS_URL, timeout=timeout) as resp:
+        req = urllib.request.Request(BOT_STATUS_URL, headers=_auth_headers())
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
             resp.read()
         health.record_success()
         return True
