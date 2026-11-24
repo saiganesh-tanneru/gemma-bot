@@ -33,6 +33,55 @@ ROBOT_STATE = {
     "speech_text": ""
 }
 
+# Supported Emoji and Mood Mappings
+EMOJI_MOOD_MAP = {
+    # Happy / Smile
+    "😀": "HAPPY", "😃": "HAPPY", "😄": "HAPPY", "😁": "HAPPY", "😊": "HAPPY", "🙂": "HAPPY", "HAPPY": "HAPPY", "SMILE": "HAPPY", "GRIN": "HAPPY",
+    # Love / Heart
+    "😍": "LOVE", "🥰": "LOVE", "😘": "LOVE", "❤️": "LOVE", "💕": "LOVE", "LOVE": "LOVE", "HEART": "LOVE",
+    # Wink
+    "😉": "WINK", "WINK": "WINK",
+    # Cool / Sunglasses
+    "😎": "COOL", "COOL": "COOL", "SUNGLASSES": "COOL",
+    # Pleading / Cute
+    "🥺": "PLEADING", "PLEADING": "PLEADING", "CUTE": "PLEADING", "PUPPY": "PLEADING",
+    # Crying / Sad
+    "😭": "CRYING", "😢": "CRYING", "😞": "CRYING", "SAD": "CRYING", "CRY": "CRYING", "CRYING": "CRYING",
+    # Surprised / Shock
+    "😮": "SURPRISED", "😲": "SURPRISED", "😱": "SURPRISED", "SURPRISED": "SURPRISED", "WOW": "SURPRISED", "SHOCK": "SURPRISED",
+    # Sleepy / Tired
+    "😴": "SLEEPY", "🥱": "SLEEPY", "💤": "SLEEPY", "SLEEPY": "SLEEPY", "TIRED": "SLEEPY", "SLEEP": "SLEEPY",
+    # Angry / Mad
+    "😡": "ANGRY", "😠": "ANGRY", "🤬": "ANGRY", "ANGRY": "ANGRY", "MAD": "ANGRY",
+    # Thinking / Ponder
+    "🤔": "THINKING", "🧐": "THINKING", "THINKING": "THINKING", "PONDER": "THINKING",
+    # Dizzy / KO
+    "😵": "DIZZY", "😵‍💫": "DIZZY", "DIZZY": "DIZZY", "CONFUSED": "DIZZY", "KO": "DIZZY",
+    # Star Eyes / Excited
+    "🤩": "STAR_EYES", "✨": "STAR_EYES", "STAR_EYES": "STAR_EYES", "EXCITED": "STAR_EYES", "STAR": "STAR_EYES",
+    # Tongue / Playful
+    "😋": "TONGUE", "😛": "TONGUE", "😝": "TONGUE", "😜": "TONGUE", "TONGUE": "TONGUE", "PLAYFUL": "TONGUE",
+    # Smirk
+    "😏": "SMIRK", "SMIRK": "SMIRK", "SLY": "SMIRK",
+    # Neutral
+    "😐": "NEUTRAL", "😑": "NEUTRAL", "NEUTRAL": "NEUTRAL"
+}
+
+def resolve_mood(val):
+    """Normalizes any string, keyword, or unicode emoji into a canonical mood."""
+    if not val:
+        return "NEUTRAL"
+    s = str(val).strip()
+    if s in EMOJI_MOOD_MAP:
+        return EMOJI_MOOD_MAP[s]
+    upper = s.upper()
+    if upper in EMOJI_MOOD_MAP:
+        return EMOJI_MOOD_MAP[upper]
+    for char, mood in EMOJI_MOOD_MAP.items():
+        if char in s:
+            return mood
+    return "NEUTRAL"
+
 class AICommandHandler(http.server.BaseHTTPRequestHandler):
     """HTTP handler to receive external AI commands and report robot status."""
     def log_message(self, format, *args):
@@ -121,11 +170,15 @@ class GemmaBotCompanion:
         # Display resolution & high-contrast colors
         self.disp_w = 128
         self.disp_h = 64
-        self.bg_color = 0x000000      # True OLED black
-        self.eye_color = 0x00E5FF     # Electric Cyan / OLED Blue
-        self.eye_dim = 0x008899       # Secondary glow / dimming
+        self.bg_color = 0x000000        # True OLED black
+        self.eye_color = 0x00E5FF       # Electric Cyan / OLED Blue
+        self.eye_dim = 0x008899         # Secondary glow / dimming
         self.mouth_color = 0x00BBDD
-        self.accent_pink = 0xFF4488   # For Love mood / hearts
+        self.accent_pink = 0xFF4488     # Love / Hearts / Tongue
+        self.accent_yellow = 0xFFDD00   # Star Eyes / Sparkle
+        self.tear_blue = 0x44AAFF       # Crying Tears
+        self.white = 0xFFFFFF           # Specular highlights & reflections
+        self.sunglass_frame = 0x00E5FF  # Frame accent for Cool glasses
         
         # Eye baseline geometry
         self.left_cx = 38
@@ -216,13 +269,73 @@ class GemmaBotCompanion:
             self.draw_filled_box(x, y, w/2, h * 0.45, self.bg_color)
 
     def draw_heart(self, cx, cy):
-        """Draws a cute heart for LOVE mood."""
+        """Draws a cute heart for LOVE mood (😍)."""
         self.draw_filled_box(cx - 7, cy - 4, 6, 6, self.accent_pink)
         self.draw_filled_box(cx + 1, cy - 4, 6, 6, self.accent_pink)
         self.draw_filled_box(cx - 9, cy, 18, 5, self.accent_pink)
         self.draw_filled_box(cx - 7, cy + 5, 14, 4, self.accent_pink)
         self.draw_filled_box(cx - 4, cy + 9, 8, 4, self.accent_pink)
         self.draw_filled_box(cx - 1, cy + 13, 2, 2, self.accent_pink)
+
+    def draw_star(self, cx, cy, r=11):
+        """Draws a bright 4-point twinkling star for STAR_EYES (🤩)."""
+        for i in range(r):
+            w = r - i
+            self.draw_filled_box(cx - w, cy - i, w * 2, 1, self.accent_yellow)
+            self.draw_filled_box(cx - w, cy + i, w * 2, 1, self.accent_yellow)
+        self.draw_filled_box(cx - 2, cy - 2, 4, 4, self.white)
+
+    def draw_sunglasses(self, lcx, rcx, cy, w, h):
+        """Draws stylish cool pixel sunglasses with glossy reflections for COOL (😎)."""
+        top_y = cy - h/2 + 2
+        lens_h = h - 6
+        # Left lens & outline
+        self.draw_filled_box(lcx - w/2 - 2, top_y, w + 4, lens_h, self.sunglass_frame)
+        self.draw_filled_box(lcx - w/2, top_y + 2, w, lens_h - 4, 0x111111)
+        # Right lens & outline
+        self.draw_filled_box(rcx - w/2 - 2, top_y, w + 4, lens_h, self.sunglass_frame)
+        self.draw_filled_box(rcx - w/2, top_y + 2, w, lens_h - 4, 0x111111)
+        # Bridge connecting glasses
+        bridge_start = lcx + w/2 - 1
+        bridge_w = (rcx - w/2) - bridge_start + 1
+        self.draw_filled_box(bridge_start, top_y + 2, bridge_w, 3, self.sunglass_frame)
+        # Glossy diagonal reflections
+        self.draw_filled_box(lcx - w/4, top_y + 3, 3, lens_h - 6, self.white)
+        self.draw_filled_box(rcx - w/4, top_y + 3, 3, lens_h - 6, self.white)
+
+    def draw_pleading_eye(self, cx, cy, w, h):
+        """Draws giant sparkly anime/puppy eye for PLEADING (🥺)."""
+        self.draw_rounded_eye(cx, cy, w + 2, h + 2, corner_r=8, color=self.eye_color)
+        # Upper large specular reflection
+        self.draw_filled_box(cx - w/4 - 2, cy - h/4 - 2, 8, 8, self.white)
+        # Lower small specular reflection
+        self.draw_filled_box(cx + w/6, cy + h/6, 4, 4, self.white)
+
+    def draw_cross_eye(self, cx, cy, size=10):
+        """Draws an 'X' cross eye for DIZZY / KO (😵)."""
+        t = 3
+        for i in range(-size, size):
+            self.draw_filled_box(cx + i - t//2, cy + i - t//2, t, t, self.eye_color)
+            self.draw_filled_box(cx + i - t//2, cy - i - t//2, t, t, self.eye_color)
+
+    def draw_crying_eye(self, cx, cy, w, h, is_left=True):
+        """Draws sad eye with streaming tear drops for CRYING (😭)."""
+        y = cy - h/2
+        self.draw_filled_box(cx - w/2, y + 5, w, h - 8, self.eye_color)
+        if is_left:
+            self.draw_filled_box(cx - w/2, y, w/2, 7, self.bg_color)
+        else:
+            self.draw_filled_box(cx, y, w/2, 7, self.bg_color)
+        # Animated tear droplets streaming down
+        tear_y = int(cy + 10 + (self.idle_timer * 2.2) % 20)
+        self.draw_filled_box(cx - 3, min(self.disp_h - 4, tear_y), 6, 6, self.tear_blue)
+        self.draw_filled_box(cx - 2, min(self.disp_h - 8, tear_y - 5), 4, 4, self.white)
+
+    def draw_tongue_mouth(self, cx, cy):
+        """Draws open smiling mouth with cute pink tongue for TONGUE (😋)."""
+        self.draw_filled_box(cx - 6, cy + 15, 12, 3, self.mouth_color)
+        self.draw_filled_box(cx - 3, cy + 17, 7, 6, self.accent_pink)
+        self.draw_filled_box(cx - 1, cy + 22, 3, 2, self.accent_pink)
 
     def render_face(self):
         """Renders the complete OLED facial expression and eye gaze."""
@@ -247,8 +360,8 @@ class GemmaBotCompanion:
         if effective_h < 3:
             effective_h = 3
 
-        # 4. Render eyes according to mood
-        if self.blink_progress > 0.85:
+        # 4. Render eyes according to mood / emoji
+        if self.blink_progress > 0.85 and self.mood != "COOL":
             self.draw_filled_box(lcx - self.eye_w/2, cy, self.eye_w, 4, self.eye_color)
             self.draw_filled_box(rcx - self.eye_w/2, cy, self.eye_w, 4, self.eye_color)
         elif self.mood == "HAPPY":
@@ -260,6 +373,50 @@ class GemmaBotCompanion:
             self.draw_heart(lcx, cy)
             self.draw_heart(rcx, cy)
             self.draw_filled_box(self.disp_w/2 - 5, cy + 16, 10, 3, self.accent_pink)
+        elif self.mood == "WINK":
+            self.draw_rounded_eye(lcx, cy, self.eye_w, effective_h, corner_r=6)
+            self.draw_happy_eye(rcx, cy, self.eye_w)
+            self.draw_filled_box(self.disp_w/2 - 5, cy + 16, 10, 3, self.mouth_color)
+            self.draw_filled_box(self.disp_w/2 + 3, cy + 14, 3, 3, self.mouth_color)
+        elif self.mood == "COOL":
+            self.draw_sunglasses(lcx, rcx, cy, self.eye_w, self.eye_h)
+            # Confident corner smirk
+            self.draw_filled_box(self.disp_w/2 - 4, cy + 17, 10, 3, self.mouth_color)
+            self.draw_filled_box(self.disp_w/2 + 5, cy + 15, 3, 3, self.mouth_color)
+        elif self.mood == "STAR_EYES":
+            self.draw_star(lcx, cy, r=12)
+            self.draw_star(rcx, cy, r=12)
+            self.draw_filled_box(self.disp_w/2 - 6, cy + 16, 12, 4, self.mouth_color)
+            self.draw_filled_box(self.disp_w/2 - 4, cy + 20, 8, 2, self.mouth_color)
+        elif self.mood == "PLEADING":
+            self.draw_pleading_eye(lcx, cy, self.eye_w, effective_h)
+            self.draw_pleading_eye(rcx, cy, self.eye_w, effective_h)
+            # Trembling small mouth
+            tremble = 1 if (self.idle_timer // 8) % 2 == 0 else 0
+            self.draw_filled_box(self.disp_w/2 - 4, cy + 17 + tremble, 8, 3, self.mouth_color)
+        elif self.mood == "CRYING":
+            self.draw_crying_eye(lcx, cy, self.eye_w, effective_h, is_left=True)
+            self.draw_crying_eye(rcx, cy, self.eye_w, effective_h, is_left=False)
+            # Downward pout
+            self.draw_filled_box(self.disp_w/2 - 5, cy + 18, 10, 3, self.tear_blue)
+            self.draw_filled_box(self.disp_w/2 - 5, cy + 20, 3, 2, self.tear_blue)
+            self.draw_filled_box(self.disp_w/2 + 2, cy + 20, 3, 2, self.tear_blue)
+        elif self.mood == "TONGUE":
+            self.draw_happy_eye(lcx, cy, self.eye_w)
+            self.draw_happy_eye(rcx, cy, self.eye_w)
+            self.draw_tongue_mouth(self.disp_w/2, cy)
+        elif self.mood == "SMIRK":
+            self.draw_rounded_eye(lcx, cy - 2, self.eye_w, effective_h, corner_r=6)
+            self.draw_sleepy_eye(rcx, cy + 3, self.eye_w)
+            self.draw_filled_box(self.disp_w/2 - 3, cy + 16, 8, 3, self.mouth_color)
+            self.draw_filled_box(self.disp_w/2 + 4, cy + 14, 3, 3, self.mouth_color)
+        elif self.mood == "DIZZY":
+            self.draw_cross_eye(lcx, cy, size=10)
+            self.draw_cross_eye(rcx, cy, size=10)
+            # Wavy mouth
+            self.draw_filled_box(self.disp_w/2 - 6, cy + 16, 4, 3, self.mouth_color)
+            self.draw_filled_box(self.disp_w/2 - 2, cy + 18, 4, 3, self.mouth_color)
+            self.draw_filled_box(self.disp_w/2 + 2, cy + 16, 4, 3, self.mouth_color)
         elif self.mood == "THINKING":
             # Looking up-right with thinking bubble
             self.draw_rounded_eye(lcx + 4, cy - 6, self.eye_w - 2, effective_h - 2, corner_r=5)
@@ -285,9 +442,11 @@ class GemmaBotCompanion:
         elif self.mood == "ANGRY":
             self.draw_angry_eye(lcx, cy, self.eye_w, effective_h, is_left=True)
             self.draw_angry_eye(rcx, cy, self.eye_w, effective_h, is_left=False)
+            self.draw_filled_box(self.disp_w/2 - 5, cy + 17, 10, 3, self.mouth_color)
         else: # NEUTRAL
             self.draw_rounded_eye(lcx, cy, self.eye_w, effective_h, corner_r=6)
             self.draw_rounded_eye(rcx, cy, self.eye_w, effective_h, corner_r=6)
+            self.draw_filled_box(self.disp_w/2 - 5, cy + 17, 10, 2, self.mouth_color)
 
         # 5. Speech indicator & dynamic lip-sync mouth
         if self.speech_timer > 0:
@@ -398,12 +557,10 @@ class GemmaBotCompanion:
                 if cmd.get("interrupt") or cmd.get("flush"):
                     self.interrupt_speech()
 
-                # 2. Update Mood
+                # 2. Update Mood / Emoji
                 if "mood" in cmd:
-                    mood_str = str(cmd["mood"]).upper()
-                    if mood_str in ("NEUTRAL", "HAPPY", "SURPRISED", "SLEEPY", "ANGRY", "THINKING", "LOVE"):
-                        self.mood = mood_str
-                        self.trigger_blink()
+                    self.mood = resolve_mood(cmd["mood"])
+                    self.trigger_blink()
 
                 # 3. Update Gaze / Look At
                 if "gaze" in cmd:
@@ -440,8 +597,14 @@ class GemmaBotCompanion:
 
                 # 5. Handle Speech Text & Audible Talk-back
                 if "speech" in cmd and cmd["speech"]:
+                    text_str = str(cmd["speech"])
+                    # Auto-detect emojis in speech to drive matching face
+                    for char, m in EMOJI_MOOD_MAP.items():
+                        if char in text_str and "mood" not in cmd:
+                            self.mood = m
+                            break
                     play_audio = bool(cmd.get("audio", True))
-                    self.trigger_speech(cmd["speech"], play_audio=play_audio)
+                    self.trigger_speech(text_str, play_audio=play_audio)
 
                 print(f"[AI Command Executed] Mood={self.mood}, Gesture={cmd.get('gesture')}, State={cmd.get('state')}")
             except Exception as e:
@@ -563,26 +726,58 @@ class GemmaBotCompanion:
         while key > 0:
             if key == ord('1'):
                 self.mood = "NEUTRAL"
-                print("Mood -> NEUTRAL")
+                print("Mood -> NEUTRAL 😐")
             elif key == ord('2') or key == ord(' '):
                 self.mood = "HAPPY"
                 self.trigger_gesture("wiggle")
-                print("Mood -> HAPPY (Pet / Tap)")
+                print("Mood -> HAPPY 😀")
             elif key == ord('3'):
                 self.mood = "SURPRISED"
                 self.trigger_gesture("perk_up")
-                print("Mood -> SURPRISED")
+                print("Mood -> SURPRISED 😮")
             elif key == ord('4'):
                 self.mood = "SLEEPY"
                 self.trigger_gesture("droop")
-                print("Mood -> SLEEPY")
+                print("Mood -> SLEEPY 😴")
             elif key == ord('5'):
                 self.mood = "ANGRY"
-                print("Mood -> ANGRY")
+                print("Mood -> ANGRY 😡")
             elif key == ord('6'):
                 self.mood = "THINKING"
                 self.trigger_gesture("curious")
-                print("Mood -> THINKING")
+                print("Mood -> THINKING 🤔")
+            elif key == ord('7'):
+                self.mood = "LOVE"
+                self.trigger_gesture("wiggle")
+                print("Mood -> LOVE 😍")
+            elif key == ord('8'):
+                self.mood = "COOL"
+                print("Mood -> COOL 😎")
+            elif key == ord('9'):
+                self.mood = "STAR_EYES"
+                self.trigger_gesture("perk_up")
+                print("Mood -> STAR_EYES 🤩")
+            elif key == ord('0'):
+                self.mood = "PLEADING"
+                print("Mood -> PLEADING 🥺")
+            elif key in (ord('W'), ord('w')):
+                self.mood = "WINK"
+                print("Mood -> WINK 😉")
+            elif key in (ord('C'), ord('c')):
+                self.mood = "CRYING"
+                self.trigger_gesture("droop")
+                print("Mood -> CRYING 😭")
+            elif key in (ord('T'), ord('t')):
+                self.mood = "TONGUE"
+                self.trigger_gesture("wiggle")
+                print("Mood -> TONGUE 😋")
+            elif key in (ord('D'), ord('d')):
+                self.mood = "DIZZY"
+                self.trigger_gesture("shake")
+                print("Mood -> DIZZY 😵")
+            elif key in (ord('S'), ord('s')):
+                self.mood = "SMIRK"
+                print("Mood -> SMIRK 😏")
             elif key == Keyboard.LEFT:
                 self.target_yaw = min(1.2, self.target_yaw + 0.2)
                 self.gaze_x = -0.9
