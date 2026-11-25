@@ -129,7 +129,7 @@ class VoiceSession:
             if not self._has_bridge_subscribers():
                 if new_state == SessionState.LISTENING:
                     asyncio.create_task(
-                        _notify_robot({"state": "LISTENING", "gaze": "center", "look_at": [0.0, -0.05]})
+                        _notify_robot({"state": "LISTENING", "mood": "NEUTRAL", "gaze": "center", "look_at": [0.0, -0.05]})
                     )
                 elif new_state in (SessionState.TRANSCRIBING, SessionState.THINKING):
                     asyncio.create_task(

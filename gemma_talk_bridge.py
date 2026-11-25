@@ -258,6 +258,7 @@ async def connect_to_gemma_talk():
                                             command_queue,
                                             {
                                                 "state": "LISTENING",
+                                                "mood": "NEUTRAL",
                                                 "gaze": "center",
                                                 "look_at": [0.0, -0.05],
                                             },

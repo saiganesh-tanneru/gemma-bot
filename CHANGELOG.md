@@ -3,6 +3,7 @@
 All notable changes to **Gemma-Bot** are documented in this file by phase.
 
 ## Voice Pipeline Integration — Sarvam AI (`feat/voice-pipeline-sarvam`)
+- **Return to Neutral After Response (`gemma_talk_bridge.py`, `voice_server/session.py`, `config.py`)**: Restored `mood="NEUTRAL"` on `LISTENING` transitions so the OLED screen returns to neutral after each reply instead of staying stuck in `THINKING` or previous moods; instructed LLM to only change `screen` color when explicitly requested.
 - **Natural Spoken Replies (`config.py`)**: Updated `VOICE_SYSTEM_PROMPT` so Gemma-Bot expresses emotions visually via `[BOT: ...]` without narrating its screen, OLED, eyes, or hardware in spoken replies.
 - **Sarvam Streaming Fix (`voice_server/pipeline/llm.py`, `intent_parser.py`, `session.py`)**: Disabled reasoning tokens (`"reasoning_effort": None`) on `sarvam-105b` so responses stream immediately into `delta.content` instead of exhausting `max_tokens` in `reasoning_content` and stalling in `THINKING`; added automatic recovery to `LISTENING` on empty LLM replies and matched response language to the user's input.
 - **Expressive Voice Sync (`voice_server/pipeline/directives.py`, `session.py`, `gemma_talk_bridge.py`, `config.py`)**: Taught `VOICE_SYSTEM_PROMPT` Gemma-Bot's 15 moods, 19 gestures, gazes, and 6 screen colors via allowlist-validated `[BOT: ...]` directives plus `extract_user_robot_action()` fallback; stopped overwriting turn moods with hardcoded `HAPPY` / `NEUTRAL` in `SPEAKING`, `llm_sentence`, and `LISTENING`.

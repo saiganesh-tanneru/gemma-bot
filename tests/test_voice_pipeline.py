@@ -330,5 +330,48 @@ def test_voice_session_recovers_to_listening_if_llm_returns_empty():
     asyncio.run(_run())
 
 
+def test_bridge_listening_returns_robot_to_neutral_after_response():
+    import gemma_talk_bridge as bridge
+    import json as _json
+    import websockets
+
+    sent_payloads = []
+
+    async def _run():
+        async def ws_handler(ws):
+            await asyncio.sleep(0.05)
+            await ws.send(_json.dumps({"type": "state_change", "state": "THINKING"}))
+            await asyncio.sleep(0.05)
+            await ws.send(_json.dumps({"type": "state_change", "state": "SPEAKING", "mood": "SURPRISED"}))
+            await asyncio.sleep(0.05)
+            await ws.send(_json.dumps({"type": "state_change", "state": "LISTENING"}))
+            await asyncio.sleep(0.5)
+
+        async with websockets.serve(ws_handler, "127.0.0.1", 0) as ws_srv:
+            ws_port = ws_srv.sockets[0].getsockname()[1]
+            orig_url = bridge.GEMMA_TALK_WS_URL
+            bridge.GEMMA_TALK_WS_URL = f"ws://127.0.0.1:{ws_port}"
+            try:
+                with patch.object(
+                    bridge,
+                    "send_bot_command",
+                    side_effect=lambda payload, *args, **kw: sent_payloads.append(payload) or {"status": "received"},
+                ):
+                    task = asyncio.create_task(bridge.connect_to_gemma_talk())
+                    await asyncio.sleep(0.3)
+                    task.cancel()
+                    try:
+                        await task
+                    except asyncio.CancelledError:
+                        pass
+            finally:
+                bridge.GEMMA_TALK_WS_URL = orig_url
+
+    asyncio.run(_run())
+    listening_cmds = [p for p in sent_payloads if p.get("state") == "LISTENING"]
+    assert listening_cmds and listening_cmds[-1].get("mood") == "NEUTRAL"
+
+
+
 
 
