@@ -201,3 +201,94 @@ def test_sarvam_api_key_defaults_full_stack_to_sarvam(monkeypatch):
     importlib.reload(config)
 
 
+def test_directive_tag_extractor_parses_split_tokens_and_validates_allowlist():
+    from voice_server.pipeline.directives import DirectiveTagExtractor
+
+    ext = DirectiveTagExtractor()
+    tokens = ["[BO", "T: mood=SLEEPY ", "gesture=droop", " screen=PURPLE] ", "Goodnight", "... zzz"]
+    text_out = []
+    for tok in tokens:
+        text_out.append(ext.feed(tok))
+    text_out.append(ext.flush())
+    assert "".join(text_out) == "Goodnight... zzz"
+    assert ext.directives == {"mood": "SLEEPY", "gesture": "droop", "screen_color": "PURPLE"}
+
+    # Disallowed values are stripped safely without crashing or leaking invalid fields
+    ext_bad = DirectiveTagExtractor()
+    out_bad = ext_bad.feed("[BOT: mood=EVIL gesture=hack_db screen=NEON] Hello!") + ext_bad.flush()
+    assert out_bad == "Hello!"
+    assert ext_bad.directives == {}
+
+    # Normal text without tag passes through cleanly
+    ext_plain = DirectiveTagExtractor()
+    out_plain = ext_plain.feed("Hello there, ") + ext_plain.feed("friend!") + ext_plain.flush()
+    assert out_plain == "Hello there, friend!"
+    assert ext_plain.directives == {}
+
+
+def test_voice_session_emits_robot_action_and_preserves_turn_mood():
+    from voice_server.session import EventBroadcaster, VoiceSession
+
+    class _FakeWS:
+        def __init__(self):
+            self.sent_json = []
+            self.sent_bytes = []
+
+        async def send_json(self, payload):
+            self.sent_json.append(payload)
+
+        async def send_bytes(self, data):
+            self.sent_bytes.append(data)
+
+    class _DummyDetector:
+        def reset(self):
+            pass
+
+    class _MockLLM:
+        async def stream_response(self, messages, system_prompt):
+            for tok in ["[BOT: mood=CRYING gesture=droop] ", "Oh no, ", "that makes me sad."]:
+                yield tok
+
+    class _MockTTS:
+        async def synthesize_sentence(self, text):
+            return b"\x00\x00" * 100
+
+    async def _run():
+        broadcaster = EventBroadcaster()
+        sub_q = broadcaster.subscribe()
+
+        with patch("voice_server.session.VoiceActivityDetector", return_value=_DummyDetector()):
+            session = VoiceSession(
+                websocket=_FakeWS(),
+                vad_model=MagicMock(),
+                stt=MagicMock(),
+                tts=_MockTTS(),
+                llm=_MockLLM(),
+                broadcaster=broadcaster,
+            )
+
+        session.conversation_history.append({"role": "user", "content": "act sad"})
+        await session._generate_and_stream_response()
+
+        events = []
+        while not sub_q.empty():
+            events.append(sub_q.get_nowait())
+        broadcaster.unsubscribe(sub_q)
+
+        robot_actions = [e for e in events if e.get("type") == "robot_action"]
+        assert robot_actions, f"Expected robot_action event, got {events}"
+        assert robot_actions[-1]["mood"] == "CRYING"
+        assert robot_actions[-1]["gesture"] == "droop"
+
+        sentences = [e for e in events if e.get("type") == "llm_sentence"]
+        assert sentences
+        assert "[BOT:" not in sentences[0]["text"]
+        assert sentences[0]["mood"] == "CRYING"
+
+        speaking = [e for e in events if e.get("type") == "state_change" and e.get("state") == "SPEAKING"]
+        assert speaking and speaking[0].get("mood") == "CRYING"
+
+    asyncio.run(_run())
+
+
+

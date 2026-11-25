@@ -11,6 +11,7 @@ import numpy as np
 
 import config
 from voice_server.pipeline.chunker import SentenceChunker
+from voice_server.pipeline.directives import DirectiveTagExtractor, extract_user_robot_action
 from voice_server.pipeline.llm import SarvamStreamingClient
 from voice_server.pipeline.stt import SpeechToText
 from voice_server.pipeline.tts import VoicePipelineTTS
@@ -100,6 +101,7 @@ class VoiceSession:
         self.chunks_received_count = 0
         self.active_generation_task: Optional[asyncio.Task] = None
         self.is_active = False
+        self.turn_action: Dict[str, object] = {}
 
         self.utterance_end_time: float = 0.0
         self.stt_latency_ms: float = 0.0
@@ -114,10 +116,12 @@ class VoiceSession:
     def _has_bridge_subscribers(self) -> bool:
         return self.broadcaster is not None and self.broadcaster.subscriber_count > 0
 
-    async def set_state(self, new_state: SessionState) -> None:
+    async def set_state(self, new_state: SessionState, extra: Optional[dict] = None) -> None:
         if self.state != new_state:
             self.state = new_state
             event = {"type": "state_change", "state": new_state.value}
+            if extra:
+                event.update(extra)
             await self.send_json(event)
             await self._emit_event(event)
 
@@ -132,7 +136,13 @@ class VoiceSession:
                         _notify_robot({"state": "THINKING", "mood": "THINKING", "gesture": "curious"})
                     )
                 elif new_state == SessionState.SPEAKING:
-                    asyncio.create_task(_notify_robot({"state": "SPEAKING", "mood": "HAPPY", "gesture": "nod"}))
+                    payload = {"state": "SPEAKING", "mood": event.get("mood", "HAPPY")}
+                    if "gesture" in event:
+                        if event["gesture"]:
+                            payload["gesture"] = event["gesture"]
+                    else:
+                        payload["gesture"] = "nod"
+                    asyncio.create_task(_notify_robot(payload))
                 elif new_state == SessionState.INTERRUPTED:
                     asyncio.create_task(
                         _notify_robot({"state": "INTERRUPTED", "interrupt": True, "mood": "SURPRISED"})
@@ -189,17 +199,34 @@ class VoiceSession:
         await self.send_json(transcript_event)
         await self._emit_event(transcript_event)
 
+        self.turn_action = extract_user_robot_action(transcript)
+        if self.turn_action:
+            await self._emit_robot_action(self.turn_action)
+
         self.conversation_history.append({"role": "user", "content": transcript})
         if len(self.conversation_history) > 6:
             self.conversation_history = self.conversation_history[-6:]
 
         self.active_generation_task = asyncio.create_task(self._generate_and_stream_response())
 
-    async def _dispatch_sentence(self, clean_sentence: str, first_audio_sent: bool) -> bool:
-        await self.send_json({"type": "transcript", "role": "assistant", "text": clean_sentence})
-        await self._emit_event({"type": "llm_sentence", "text": clean_sentence})
+    async def _emit_robot_action(self, action: Dict[str, object]) -> None:
+        if not action:
+            return
+        await self._emit_event({"type": "robot_action", **action})
         if not self._has_bridge_subscribers():
-            asyncio.create_task(_notify_robot({"speech": clean_sentence, "mood": "HAPPY", "audio": False}))
+            asyncio.create_task(_notify_robot(dict(action)))
+
+    async def _dispatch_sentence(
+        self,
+        clean_sentence: str,
+        first_audio_sent: bool,
+        turn_mood: str,
+        has_explicit_gesture: bool,
+    ) -> bool:
+        await self.send_json({"type": "transcript", "role": "assistant", "text": clean_sentence})
+        await self._emit_event({"type": "llm_sentence", "text": clean_sentence, "mood": turn_mood})
+        if not self._has_bridge_subscribers():
+            asyncio.create_task(_notify_robot({"speech": clean_sentence, "mood": turn_mood, "audio": False}))
 
         t_tts_start = time.perf_counter()
         pcm_bytes = await self.tts.synthesize_sentence(clean_sentence)
@@ -209,7 +236,10 @@ class VoiceSession:
             first_audio_sent = True
             self.tts_first_chunk_ms = tts_duration_ms
             self.total_e2e_ms = (time.perf_counter() - self.utterance_end_time) * 1000.0
-            await self.set_state(SessionState.SPEAKING)
+            speaking_extra: Dict[str, object] = {"mood": turn_mood}
+            if has_explicit_gesture:
+                speaking_extra["gesture"] = None
+            await self.set_state(SessionState.SPEAKING, extra=speaking_extra)
             await self.send_json(
                 {
                     "type": "telemetry",
@@ -225,6 +255,8 @@ class VoiceSession:
 
     async def _generate_and_stream_response(self) -> None:
         full_assistant_reply: List[str] = []
+        directive_extractor = DirectiveTagExtractor()
+        directives_dispatched = False
         try:
             await self.set_state(SessionState.THINKING)
             self.chunker.reset()
@@ -240,16 +272,49 @@ class VoiceSession:
                     first_token_received = True
                     self.llm_ttft_ms = (time.perf_counter() - t_llm_start) * 1000.0
 
-                full_assistant_reply.append(token)
-                for sentence in self.chunker.add_token(token):
+                clean_tok = directive_extractor.feed(token)
+                if directive_extractor.resolved and not directives_dispatched:
+                    directives_dispatched = True
+                    if directive_extractor.directives:
+                        self.turn_action.update(directive_extractor.directives)
+                        await self._emit_robot_action(self.turn_action)
+
+                if not clean_tok:
+                    continue
+
+                full_assistant_reply.append(clean_tok)
+                turn_mood = str(self.turn_action.get("mood") or "HAPPY")
+                has_explicit_gesture = bool(self.turn_action.get("gesture"))
+                for sentence in self.chunker.add_token(clean_tok):
                     clean_sentence = SarvamStreamingClient.clean_voice_text(sentence)
                     if clean_sentence:
-                        first_audio_sent = await self._dispatch_sentence(clean_sentence, first_audio_sent)
+                        first_audio_sent = await self._dispatch_sentence(
+                            clean_sentence, first_audio_sent, turn_mood, has_explicit_gesture
+                        )
 
+            tail = directive_extractor.flush()
+            if directive_extractor.directives and not directives_dispatched:
+                self.turn_action.update(directive_extractor.directives)
+                await self._emit_robot_action(self.turn_action)
+            if tail:
+                full_assistant_reply.append(tail)
+                for sentence in self.chunker.add_token(tail):
+                    clean_sentence = SarvamStreamingClient.clean_voice_text(sentence)
+                    if clean_sentence:
+                        turn_mood = str(self.turn_action.get("mood") or "HAPPY")
+                        has_explicit_gesture = bool(self.turn_action.get("gesture"))
+                        first_audio_sent = await self._dispatch_sentence(
+                            clean_sentence, first_audio_sent, turn_mood, has_explicit_gesture
+                        )
+
+            turn_mood = str(self.turn_action.get("mood") or "HAPPY")
+            has_explicit_gesture = bool(self.turn_action.get("gesture"))
             for remaining in self.chunker.flush():
                 clean_sentence = SarvamStreamingClient.clean_voice_text(remaining)
                 if clean_sentence:
-                    first_audio_sent = await self._dispatch_sentence(clean_sentence, first_audio_sent)
+                    first_audio_sent = await self._dispatch_sentence(
+                        clean_sentence, first_audio_sent, turn_mood, has_explicit_gesture
+                    )
 
             complete_reply = "".join(full_assistant_reply).strip()
             if complete_reply:
@@ -268,6 +333,7 @@ class VoiceSession:
             await self.set_state(SessionState.LISTENING)
         finally:
             self.active_generation_task = None
+            self.turn_action = {}
 
     async def run(self) -> None:
         self.is_active = True

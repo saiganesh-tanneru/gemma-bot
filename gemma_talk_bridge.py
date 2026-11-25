@@ -258,7 +258,6 @@ async def connect_to_gemma_talk():
                                             command_queue,
                                             {
                                                 "state": "LISTENING",
-                                                "mood": "NEUTRAL",
                                                 "gaze": "center",
                                                 "look_at": [0.0, -0.05],
                                             },
@@ -269,10 +268,16 @@ async def connect_to_gemma_talk():
                                             {"state": "THINKING", "gesture": "curious"},
                                         )
                                     elif state == "SPEAKING":
-                                        _enqueue_command(
-                                            command_queue,
-                                            {"state": "SPEAKING", "gesture": "nod"},
-                                        )
+                                        speaking_cmd = {
+                                            "state": "SPEAKING",
+                                            "mood": data.get("mood", "HAPPY"),
+                                        }
+                                        if "gesture" in data:
+                                            if data["gesture"]:
+                                                speaking_cmd["gesture"] = data["gesture"]
+                                        else:
+                                            speaking_cmd["gesture"] = "nod"
+                                        _enqueue_command(command_queue, speaking_cmd)
                                     elif state in ("INTERRUPTED", "IDLE"):
                                         _drain_pending_commands(command_queue)
                                         _dispatch_urgent(
@@ -280,6 +285,17 @@ async def connect_to_gemma_talk():
                                             {"state": state, "interrupt": True},
                                             health,
                                         )
+
+                                # 1b. Direct Robot Expressive Actions (from voice LLM or user intent)
+                                elif msg_type == "robot_action":
+                                    robot_cmd = {
+                                        k: v
+                                        for k, v in data.items()
+                                        if k in ("mood", "gesture", "gaze", "screen_color", "look_at") and v is not None
+                                    }
+                                    if robot_cmd:
+                                        logger.info("Robot Action: %s", robot_cmd)
+                                        _enqueue_command(command_queue, robot_cmd)
 
                                 # 2. Instant Flush / Interruption
                                 elif msg_type == "flush":
@@ -296,7 +312,11 @@ async def connect_to_gemma_talk():
                                     logger.info("Assistant: %r", bot_text)
                                     _enqueue_command(
                                         command_queue,
-                                        {"mood": "HAPPY", "speech": bot_text, "audio": False},
+                                        {
+                                            "mood": data.get("mood", "HAPPY"),
+                                            "speech": bot_text,
+                                            "audio": False,
+                                        },
                                     )
 
                             except json.JSONDecodeError as exc:
