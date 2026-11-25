@@ -80,6 +80,8 @@ def test_sarvam_streaming_client_parses_sse_and_strips_markdown():
         assert call_kwargs["headers"]["api-subscription-key"] == "test-sarvam-key"
         assert call_kwargs["json"]["model"] == "sarvam-105b"
         assert call_kwargs["json"]["stream"] is True
+        assert "reasoning_effort" in call_kwargs["json"]
+        assert call_kwargs["json"]["reasoning_effort"] is None
 
     asyncio.run(_run())
 
@@ -289,6 +291,44 @@ def test_voice_session_emits_robot_action_and_preserves_turn_mood():
         assert speaking and speaking[0].get("mood") == "CRYING"
 
     asyncio.run(_run())
+
+
+def test_voice_session_recovers_to_listening_if_llm_returns_empty():
+    from voice_server.session import EventBroadcaster, SessionState, VoiceSession
+
+    class _FakeWS:
+        async def send_json(self, payload):
+            pass
+
+        async def send_bytes(self, data):
+            pass
+
+    class _DummyDetector:
+        def reset(self):
+            pass
+
+    class _EmptyLLM:
+        async def stream_response(self, messages, system_prompt):
+            if False:
+                yield ""
+
+    async def _run():
+        broadcaster = EventBroadcaster()
+        with patch("voice_server.session.VoiceActivityDetector", return_value=_DummyDetector()):
+            session = VoiceSession(
+                websocket=_FakeWS(),
+                vad_model=MagicMock(),
+                stt=MagicMock(),
+                tts=MagicMock(),
+                llm=_EmptyLLM(),
+                broadcaster=broadcaster,
+            )
+        session.conversation_history.append({"role": "user", "content": "hello"})
+        await session._generate_and_stream_response()
+        assert session.state == SessionState.LISTENING
+
+    asyncio.run(_run())
+
 
 
 

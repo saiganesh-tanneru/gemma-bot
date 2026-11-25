@@ -267,6 +267,7 @@ class SarvamIntentProvider(IntentProvider):
             ],
             "response_format": self.RESPONSE_FORMAT,
             "temperature": 0.1,
+            "reasoning_effort": None,
         }
         req = urllib.request.Request(
             self.endpoint,

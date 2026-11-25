@@ -200,8 +200,6 @@ class VoiceSession:
         await self._emit_event(transcript_event)
 
         self.turn_action = extract_user_robot_action(transcript)
-        if self.turn_action:
-            await self._emit_robot_action(self.turn_action)
 
         self.conversation_history.append({"role": "user", "content": transcript})
         if len(self.conversation_history) > 6:
@@ -259,6 +257,8 @@ class VoiceSession:
         directives_dispatched = False
         try:
             await self.set_state(SessionState.THINKING)
+            if self.turn_action:
+                await self._emit_robot_action(self.turn_action)
             self.chunker.reset()
             t_llm_start = time.perf_counter()
             first_token_received = False
@@ -322,6 +322,8 @@ class VoiceSession:
                 self.conversation_history.append({"role": "assistant", "content": clean_reply})
 
             await self.send_json({"type": "turn_complete"})
+            if not first_audio_sent:
+                await self.set_state(SessionState.LISTENING)
         except asyncio.CancelledError:
             if full_assistant_reply:
                 partial = SarvamStreamingClient.clean_voice_text("".join(full_assistant_reply))

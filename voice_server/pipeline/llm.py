@@ -55,8 +55,9 @@ class SarvamStreamingClient:
             "model": self.model,
             "messages": [{"role": "system", "content": system_prompt}] + messages,
             "stream": True,
-            "temperature": 0.7,
+            "temperature": 0.6,
             "max_tokens": self.max_tokens,
+            "reasoning_effort": None,
         }
         headers = {
             "Content-Type": "application/json",
