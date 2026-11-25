@@ -228,6 +228,22 @@ def test_directive_tag_extractor_parses_split_tokens_and_validates_allowlist():
     assert ext_plain.directives == {}
 
 
+def test_directive_tag_extractor_strips_trailing_and_midstream_tags():
+    from voice_server.pipeline.directives import DirectiveTagExtractor
+
+    ext = DirectiveTagExtractor()
+    tokens = [
+        "I do not know your name. ",
+        "You can tell me though. ",
+        "[BO",
+        "T: mood=NEUTRAL gesture=nod gaze=center]",
+    ]
+    out = "".join(ext.feed(t) for t in tokens) + ext.flush()
+    assert "[BOT" not in out
+    assert out.strip() == "I do not know your name. You can tell me though."
+    assert ext.directives == {"mood": "NEUTRAL", "gesture": "nod", "gaze": "center"}
+
+
 def test_voice_session_emits_robot_action_and_preserves_turn_mood():
     from voice_server.session import EventBroadcaster, VoiceSession
 

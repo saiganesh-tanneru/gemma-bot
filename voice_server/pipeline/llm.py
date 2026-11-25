@@ -31,7 +31,8 @@ class SarvamStreamingClient:
 
     @staticmethod
     def clean_voice_text(text: str) -> str:
-        """Strip markdown, code blocks, and <think> tags for natural TTS playback."""
+        """Strip [BOT: ...] tags, markdown, code blocks, and <think> tags for natural TTS playback."""
+        text = re.sub(r"\[BOT:[^\]]*\]?", "", text, flags=re.IGNORECASE)
         text = re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL)
         text = re.sub(r"```.*?```", "", text, flags=re.DOTALL)
         text = re.sub(r"`([^`]+)`", r"\1", text)

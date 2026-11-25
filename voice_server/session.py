@@ -254,7 +254,6 @@ class VoiceSession:
     async def _generate_and_stream_response(self) -> None:
         full_assistant_reply: List[str] = []
         directive_extractor = DirectiveTagExtractor()
-        directives_dispatched = False
         try:
             await self.set_state(SessionState.THINKING)
             if self.turn_action:
@@ -273,11 +272,10 @@ class VoiceSession:
                     self.llm_ttft_ms = (time.perf_counter() - t_llm_start) * 1000.0
 
                 clean_tok = directive_extractor.feed(token)
-                if directive_extractor.resolved and not directives_dispatched:
-                    directives_dispatched = True
-                    if directive_extractor.directives:
-                        self.turn_action.update(directive_extractor.directives)
-                        await self._emit_robot_action(self.turn_action)
+                if directive_extractor.has_new_directives():
+                    directive_extractor.mark_emitted()
+                    self.turn_action.update(directive_extractor.directives)
+                    await self._emit_robot_action(self.turn_action)
 
                 if not clean_tok:
                     continue
@@ -293,7 +291,8 @@ class VoiceSession:
                         )
 
             tail = directive_extractor.flush()
-            if directive_extractor.directives and not directives_dispatched:
+            if directive_extractor.has_new_directives():
+                directive_extractor.mark_emitted()
                 self.turn_action.update(directive_extractor.directives)
                 await self._emit_robot_action(self.turn_action)
             if tail:
