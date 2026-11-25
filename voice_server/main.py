@@ -56,6 +56,8 @@ async def lifespan(app: FastAPI):
         await llm_client.close()
     if tts_model:
         await tts_model.close()
+    if stt_model:
+        await stt_model.close()
 
 
 app = FastAPI(title="Gemma-Bot Sarvam Voice Server", lifespan=lifespan)

@@ -25,12 +25,15 @@ async def run_warmup(vad: SileroVAD, stt: SpeechToText, tts: VoicePipelineTTS) -
             logger.warning("VAD warmup warning: %s", exc)
 
     if stt is not None:
-        try:
-            dummy_audio = np.zeros(16000, dtype=np.float32)
-            await stt.transcribe(dummy_audio)
-            logger.info("✓ STT (%s) warmed", config.VOICE_STT_ENGINE)
-        except Exception as exc:
-            logger.warning("STT warmup warning: %s", exc)
+        if getattr(stt, "engine", "") == "sarvam":
+            logger.info("✓ Sarvam STT (%s) ready", config.SARVAM_STT_MODEL)
+        else:
+            try:
+                dummy_audio = np.zeros(16000, dtype=np.float32)
+                await stt.transcribe(dummy_audio)
+                logger.info("✓ STT (%s) warmed", config.VOICE_STT_ENGINE)
+            except Exception as exc:
+                logger.warning("STT warmup warning: %s", exc)
 
     if tts is not None and tts.engine == "kokoro":
         try:

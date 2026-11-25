@@ -139,7 +139,8 @@ All defaults live in `config.py` and can be overridden via environment variables
 | `GEMMA_VOICE_PORT` | `8000` | Integrated `voice_server` port |
 | `GEMMA_VOICE_CLIENT_PORT` | `5173` | Integrated `voice_client` Vite port |
 | `GEMMA_VOICE_TTS_ENGINE` | `sarvam` if key set else `kokoro` | Voice server PCM synthesizer (`sarvam` or `kokoro`) |
-| `GEMMA_STT_ENGINE` | `ai4bharat` | Speech-to-text engine (`ai4bharat` or `whisper`) |
+| `GEMMA_STT_ENGINE` | `sarvam` if key set else `ai4bharat` | Speech-to-text engine (`sarvam`, `ai4bharat`, or `whisper`) |
+| `GEMMA_SARVAM_STT_MODEL` | `saaras:v4` | Sarvam STT model (`POST /speech-to-text`) |
 | `GEMMA_MODELS_DIR` | `./voice_server/models` | Directory containing `silero_vad.onnx` (and optional Kokoro models) |
 | `WEBOTS_APP` | `/Applications/Webots.app/Contents/MacOS/webots` | Webots executable path |
 | `GEMMA_TTS_PROVIDER` | `mac_say` (macOS) / `null` (other) | `mac_say`, `sarvam`, or `null` |

@@ -43,7 +43,7 @@ export const LatencyHud: React.FC<LatencyHudProps> = ({ telemetry }) => {
       }}
     >
       <div className="metric-card">
-        <span className="metric-label">STT (Whisper)</span>
+        <span className="metric-label">STT (Sarvam)</span>
         <span className="metric-value">{telemetry.stt_ms} ms</span>
       </div>
 

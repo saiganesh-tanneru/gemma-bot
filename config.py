@@ -25,7 +25,8 @@ def _load_dotenv(env_path: Path) -> None:
             os.environ.setdefault(key, val)
 
 
-_load_dotenv(REPO_ROOT / ".env")
+if os.environ.get("GEMMA_SKIP_DOTENV") != "1":
+    _load_dotenv(REPO_ROOT / ".env")
 
 
 def _env_int(name: str, default: int) -> int:
@@ -53,6 +54,9 @@ BOT_STATUS_URL = f"{BOT_BASE_URL}/status"
 BOT_AUTH_TOKEN = os.environ.get("GEMMA_BOT_TOKEN", "")
 MAX_BODY_BYTES = _env_int("GEMMA_MAX_BODY_BYTES", 16384)
 
+# Sarvam AI API (env-only secret; never log or commit)
+SARVAM_API_KEY = os.environ.get("SARVAM_API_KEY", "")
+
 # Voice Server & Web UI (integrated pipeline)
 VOICE_SERVER_HOST = os.environ.get("GEMMA_VOICE_HOST", "0.0.0.0")
 VOICE_SERVER_PORT = _env_int("GEMMA_VOICE_PORT", 8000)
@@ -62,7 +66,10 @@ VOICE_AUDIO_SAMPLE_RATE = _env_int("GEMMA_AUDIO_SAMPLE_RATE", 16000)
 VOICE_AUDIO_CHUNK_SAMPLES = _env_int("GEMMA_AUDIO_CHUNK_SAMPLES", 512)
 VOICE_VAD_THRESHOLD = _env_float("GEMMA_VAD_THRESHOLD", 0.35)
 VOICE_VAD_SILENCE_MS = _env_int("GEMMA_VAD_SILENCE_MS", 400)
-VOICE_STT_ENGINE = os.environ.get("GEMMA_STT_ENGINE", "ai4bharat")
+VOICE_STT_ENGINE = os.environ.get(
+    "GEMMA_STT_ENGINE",
+    "sarvam" if SARVAM_API_KEY else "ai4bharat",
+).lower().strip()
 VOICE_INDIC_LANG = os.environ.get("GEMMA_INDIC_LANG", "te")
 VOICE_WHISPER_MODEL = os.environ.get("GEMMA_WHISPER_MODEL", "small")
 VOICE_WHISPER_DEVICE = os.environ.get("GEMMA_WHISPER_DEVICE", "cpu")
@@ -99,13 +106,17 @@ BRIDGE_WS_RETRY_MAX_SECONDS = _env_float("GEMMA_BRIDGE_WS_RETRY_MAX", 30.0)
 CLI_COMMAND_TIMEOUT_SECONDS = _env_float("GEMMA_CLI_COMMAND_TIMEOUT", 3.0)
 CLI_STATUS_TIMEOUT_SECONDS = _env_float("GEMMA_CLI_STATUS_TIMEOUT", 2.0)
 
-# Speech / TTS configuration
-_DEFAULT_TTS = "mac_say" if sys.platform == "darwin" else "null"
+# Speech / TTS configuration (defaults to sarvam when SARVAM_API_KEY is set)
+_DEFAULT_TTS = "sarvam" if SARVAM_API_KEY else ("mac_say" if sys.platform == "darwin" else "null")
 TTS_PROVIDER = os.environ.get("GEMMA_TTS_PROVIDER", _DEFAULT_TTS).lower().strip()
 TTS_MAC_VOICE = os.environ.get("GEMMA_TTS_MAC_VOICE", "Samantha")
 
-# Sarvam AI API (env-only secret; never log or commit)
-SARVAM_API_KEY = os.environ.get("SARVAM_API_KEY", "")
+SARVAM_STT_URL = os.environ.get("GEMMA_SARVAM_STT_URL", "https://api.sarvam.ai/speech-to-text")
+SARVAM_STT_MODEL = os.environ.get("GEMMA_SARVAM_STT_MODEL", "saaras:v4")
+SARVAM_STT_LANGUAGE = os.environ.get("GEMMA_SARVAM_STT_LANGUAGE", "unknown")
+SARVAM_STT_MODE = os.environ.get("GEMMA_SARVAM_STT_MODE", "transcribe")
+SARVAM_STT_TIMEOUT_SECONDS = _env_float("GEMMA_SARVAM_STT_TIMEOUT", 10.0)
+
 SARVAM_TTS_URL = os.environ.get("GEMMA_SARVAM_TTS_URL", "https://api.sarvam.ai/text-to-speech")
 SARVAM_TTS_MODEL = os.environ.get("GEMMA_SARVAM_TTS_MODEL", "bulbul:v3")
 SARVAM_TTS_SPEAKER = os.environ.get("GEMMA_SARVAM_TTS_SPEAKER", "shubh")

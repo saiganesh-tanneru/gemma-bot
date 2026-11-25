@@ -3,7 +3,7 @@
 All notable changes to **Gemma-Bot** are documented in this file by phase.
 
 ## Voice Pipeline Integration — Sarvam AI (`feat/voice-pipeline-sarvam`)
-- **Integrated Voice Server (`voice_server/`)**: Moved `gemma-talk`'s full-duplex voice pipeline (Silero VAD, AI4Bharat/Whisper STT, `SentenceChunker`, `VoiceSession` with barge-in) into `gemma-bot` and replaced `OllamaStreamingClient` (`gemma4`) with `SarvamStreamingClient` (`Sarvam /v1/chat/completions` streaming SSE via `config.SARVAM_CHAT_URL`).
+- **Integrated Voice Server (`voice_server/`)**: Moved `gemma-talk`'s full-duplex voice pipeline (Silero VAD, `SentenceChunker`, `VoiceSession` with barge-in) into `gemma-bot`, added **Sarvam STT** (`saaras:v4` via `POST https://api.sarvam.ai/speech-to-text`), and replaced `OllamaStreamingClient` (`gemma4`) with `SarvamStreamingClient` (`Sarvam /v1/chat/completions` streaming SSE via `config.SARVAM_CHAT_URL`). When `SARVAM_API_KEY` is set, STT, LLM, TTS, and Intent Parser all default to Sarvam AI.
 - **Sarvam Voice TTS (`voice_server/pipeline/tts.py`)**: Added Sarvam Bulbul 24kHz Int16 PCM cloud synthesis (`sarvam` engine, default when `SARVAM_API_KEY` is set) alongside optional local `kokoro` ONNX.
 - **Event Bus & Bridge Sync (`/ws/events`)**: Added `EventBroadcaster` in `voice_server` and pointed `GEMMA_TALK_WS_URL` at `/ws/events` so `gemma_talk_bridge.py` receives live browser session events without duplicating direct `_notify_robot` calls.
 - **Integrated Web UI (`voice_client/`) & Self-Contained `start_all.sh`**: Ported the React/Vite UI into `voice_client/` (branded for Gemma-Bot + Sarvam AI) and updated `start_all.sh` (preserving `wait_for` bounded timeouts) to run entirely inside `gemma-bot` without external `gemma-talk` or Ollama dependencies.

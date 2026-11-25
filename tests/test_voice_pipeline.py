@@ -150,3 +150,54 @@ def test_voice_session_broadcasts_events_and_respects_auth():
         broadcaster.unsubscribe(sub_q)
 
     asyncio.run(_run())
+
+
+def test_voice_pipeline_sarvam_stt_transcribes_pcm():
+    import numpy as np
+    from voice_server.pipeline.stt import SpeechToText
+
+    mock_resp = MagicMock()
+    mock_resp.raise_for_status.return_value = None
+    mock_resp.json.return_value = {
+        "request_id": "req-1",
+        "transcript": "నమస్కారం గెమ్మా",
+        "language_code": "te-IN",
+    }
+
+    async def _run():
+        stt = SpeechToText(engine="sarvam", sarvam_api_key="test-sarvam-key")
+        audio = np.zeros(16000, dtype=np.float32)
+        with patch("httpx.AsyncClient.post", new=AsyncMock(return_value=mock_resp)) as mock_post:
+            transcript, lang, conf = await stt.transcribe(audio)
+            await stt.close()
+        assert transcript == "నమస్కారం గెమ్మా"
+        assert lang == "te-IN"
+        assert conf == 1.0
+        call_kwargs = mock_post.call_args.kwargs
+        assert call_kwargs["headers"]["api-subscription-key"] == "test-sarvam-key"
+        assert call_kwargs["data"]["model"] == "saaras:v4"
+        assert "file" in call_kwargs["files"]
+
+    asyncio.run(_run())
+
+
+def test_sarvam_api_key_defaults_full_stack_to_sarvam(monkeypatch):
+    import importlib
+    import config
+
+    monkeypatch.setenv("GEMMA_SKIP_DOTENV", "1")
+    for var in ("GEMMA_STT_ENGINE", "GEMMA_VOICE_TTS_ENGINE", "GEMMA_TTS_PROVIDER", "GEMMA_INTENT_PROVIDER"):
+        monkeypatch.delenv(var, raising=False)
+    monkeypatch.setenv("SARVAM_API_KEY", "dummy-key-for-config-test")
+
+    cfg = importlib.reload(config)
+    assert cfg.VOICE_STT_ENGINE == "sarvam"
+    assert cfg.VOICE_TTS_ENGINE == "sarvam"
+    assert cfg.TTS_PROVIDER == "sarvam"
+    assert cfg.INTENT_PROVIDER == "sarvam"
+
+    monkeypatch.delenv("SARVAM_API_KEY", raising=False)
+    monkeypatch.setenv("GEMMA_INTENT_PROVIDER", "keyword")
+    importlib.reload(config)
+
+
