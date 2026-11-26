@@ -25,7 +25,8 @@ def _load_dotenv(env_path: Path) -> None:
             os.environ.setdefault(key, val)
 
 
-_load_dotenv(REPO_ROOT / ".env")
+if os.environ.get("GEMMA_SKIP_DOTENV") != "1":
+    _load_dotenv(REPO_ROOT / ".env")
 
 
 def _env_int(name: str, default: int) -> int:
@@ -53,9 +54,53 @@ BOT_STATUS_URL = f"{BOT_BASE_URL}/status"
 BOT_AUTH_TOKEN = os.environ.get("GEMMA_BOT_TOKEN", "")
 MAX_BODY_BYTES = _env_int("GEMMA_MAX_BODY_BYTES", 16384)
 
-# Gemma-Talk Voice Server / Bridge
-GEMMA_TALK_WS_URL = os.environ.get("GEMMA_TALK_WS_URL", "ws://localhost:8000/ws")
-GEMMA_TALK_DIR = Path(os.environ.get("GEMMA_TALK_DIR", str(Path.home() / "Documents" / "gemma-talk")))
+# Sarvam AI API (env-only secret; never log or commit)
+SARVAM_API_KEY = os.environ.get("SARVAM_API_KEY", "")
+
+# Voice Server & Web UI (integrated pipeline)
+VOICE_SERVER_HOST = os.environ.get("GEMMA_VOICE_HOST", "0.0.0.0")
+VOICE_SERVER_PORT = _env_int("GEMMA_VOICE_PORT", 8000)
+VOICE_CLIENT_PORT = _env_int("GEMMA_VOICE_CLIENT_PORT", 5173)
+VOICE_MODELS_DIR = Path(os.environ.get("GEMMA_MODELS_DIR", str(REPO_ROOT / "voice_server" / "models")))
+VOICE_AUDIO_SAMPLE_RATE = _env_int("GEMMA_AUDIO_SAMPLE_RATE", 16000)
+VOICE_AUDIO_CHUNK_SAMPLES = _env_int("GEMMA_AUDIO_CHUNK_SAMPLES", 512)
+VOICE_VAD_THRESHOLD = _env_float("GEMMA_VAD_THRESHOLD", 0.35)
+VOICE_VAD_SILENCE_MS = _env_int("GEMMA_VAD_SILENCE_MS", 400)
+VOICE_STT_ENGINE = os.environ.get(
+    "GEMMA_STT_ENGINE",
+    "sarvam" if SARVAM_API_KEY else "ai4bharat",
+).lower().strip()
+VOICE_INDIC_LANG = os.environ.get("GEMMA_INDIC_LANG", "te")
+VOICE_WHISPER_MODEL = os.environ.get("GEMMA_WHISPER_MODEL", "small")
+VOICE_WHISPER_DEVICE = os.environ.get("GEMMA_WHISPER_DEVICE", "cpu")
+VOICE_WHISPER_COMPUTE_TYPE = os.environ.get("GEMMA_WHISPER_COMPUTE_TYPE", "int8")
+VOICE_WHISPER_CPU_THREADS = _env_int("GEMMA_WHISPER_CPU_THREADS", 4)
+VOICE_WHISPER_LANGUAGE = os.environ.get("GEMMA_WHISPER_LANGUAGE", "") or None
+VOICE_TTS_VOICE = os.environ.get("GEMMA_VOICE_TTS_VOICE", "af_heart")
+VOICE_TTS_SPEED = _env_float("GEMMA_VOICE_TTS_SPEED", 1.0)
+VOICE_TTS_SAMPLE_RATE = 24000
+VOICE_SYSTEM_PROMPT = os.environ.get(
+    "GEMMA_VOICE_SYSTEM_PROMPT",
+    (
+        "You are Gemma-Bot, a friendly desktop companion robot. "
+        "You physically express emotions using a hidden control tag at the very start of your reply:\n"
+        "[BOT: mood=<MOOD> gesture=<GESTURE> gaze=<GAZE> screen=<COLOR>] (omit any unused fields).\n"
+        "Valid values ONLY:\n"
+        "- mood: NEUTRAL, HAPPY, LOVE, WINK, COOL, STAR_EYES, PLEADING, CRYING, TONGUE, SMIRK, DIZZY, THINKING, SLEEPY, SURPRISED, ANGRY\n"
+        "- gesture: nod, shake, wiggle, curious, tilt_left, tilt_right, perk_up, droop, bounce, groove, shiver, scan, confused, bow, cheer, yawn, shy, peek_a_boo, dizzy_spin\n"
+        "- gaze: left, right, up, down, center\n"
+        "- screen: CYAN, GREEN, AMBER, BLUE, PURPLE, WHITE\n"
+        "Use the [BOT: ...] tag to show the matching emotion or action visually during your reply "
+        "(for example, scary -> mood=SURPRISED gesture=shiver, sleep -> mood=SLEEPY gesture=droop, friendly answer -> mood=HAPPY gesture=nod). "
+        "Only include screen=<COLOR> when the user explicitly asks to change the screen or eye color; omit screen otherwise. "
+        "IMPORTANT: NEVER describe or mention your screen, display, OLED, pixels, eyes, head, or animations in your spoken reply—just show them with the tag and speak 1-2 natural sentences directly to the user. "
+        "Always reply in the exact same language as the user's latest message (English -> English, Telugu -> Telugu, Tanglish -> Tanglish). "
+        "Never read the [BOT: ...] tag aloud, never use markdown or emojis, and if asked to do something physical you lack (like walking), gently say you can't do that."
+    ),
+)
+
+# Voice Server Bridge WebSocket URL (subscribes to /ws/events on voice_server)
+GEMMA_TALK_WS_URL = os.environ.get("GEMMA_TALK_WS_URL", f"ws://127.0.0.1:{VOICE_SERVER_PORT}/ws/events")
 
 # Paths
 WORLD_PATH = Path(os.environ.get("GEMMA_WORLD_PATH", str(REPO_ROOT / "worlds" / "gemma_bot.wbt")))
@@ -72,18 +117,26 @@ BRIDGE_WS_RETRY_MAX_SECONDS = _env_float("GEMMA_BRIDGE_WS_RETRY_MAX", 30.0)
 CLI_COMMAND_TIMEOUT_SECONDS = _env_float("GEMMA_CLI_COMMAND_TIMEOUT", 3.0)
 CLI_STATUS_TIMEOUT_SECONDS = _env_float("GEMMA_CLI_STATUS_TIMEOUT", 2.0)
 
-# Speech / TTS configuration
-_DEFAULT_TTS = "mac_say" if sys.platform == "darwin" else "null"
+# Speech / TTS configuration (defaults to sarvam when SARVAM_API_KEY is set)
+_DEFAULT_TTS = "sarvam" if SARVAM_API_KEY else ("mac_say" if sys.platform == "darwin" else "null")
 TTS_PROVIDER = os.environ.get("GEMMA_TTS_PROVIDER", _DEFAULT_TTS).lower().strip()
 TTS_MAC_VOICE = os.environ.get("GEMMA_TTS_MAC_VOICE", "Samantha")
 
-# Sarvam AI API (env-only secret; never log or commit)
-SARVAM_API_KEY = os.environ.get("SARVAM_API_KEY", "")
+SARVAM_STT_URL = os.environ.get("GEMMA_SARVAM_STT_URL", "https://api.sarvam.ai/speech-to-text")
+SARVAM_STT_MODEL = os.environ.get("GEMMA_SARVAM_STT_MODEL", "saaras:v4")
+SARVAM_STT_LANGUAGE = os.environ.get("GEMMA_SARVAM_STT_LANGUAGE", "unknown")
+SARVAM_STT_MODE = os.environ.get("GEMMA_SARVAM_STT_MODE", "transcribe")
+SARVAM_STT_TIMEOUT_SECONDS = _env_float("GEMMA_SARVAM_STT_TIMEOUT", 10.0)
+
 SARVAM_TTS_URL = os.environ.get("GEMMA_SARVAM_TTS_URL", "https://api.sarvam.ai/text-to-speech")
 SARVAM_TTS_MODEL = os.environ.get("GEMMA_SARVAM_TTS_MODEL", "bulbul:v3")
 SARVAM_TTS_SPEAKER = os.environ.get("GEMMA_SARVAM_TTS_SPEAKER", "shubh")
 SARVAM_TTS_LANGUAGE = os.environ.get("GEMMA_SARVAM_TTS_LANGUAGE", "en-IN")
 SARVAM_TTS_TIMEOUT_SECONDS = _env_float("GEMMA_SARVAM_TTS_TIMEOUT", 5.0)
+VOICE_TTS_ENGINE = os.environ.get(
+    "GEMMA_VOICE_TTS_ENGINE",
+    "sarvam" if SARVAM_API_KEY else "kokoro",
+).lower().strip()
 
 # Intent Parser / LLM configuration
 INTENT_PROVIDER = os.environ.get(

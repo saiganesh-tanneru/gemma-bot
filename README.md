@@ -19,7 +19,7 @@ A complete Webots simulation of **Gemma-Bot**, an expressive desktop companion r
 - **AI Command Integration (`ai_assistant.py` + `intent_parser.py`)**: Send English, Telugu, or Tanglish prompts (parsed via Sarvam structured JSON output with strict allowlist validation and word-boundary keyword fallback) or raw JSON commands to control gestures, moods, gaze, and speech.
 - **Pluggable Speech & Audio-Duration Lip-Sync (`tts.py`)**: Supports `MacSayTTS` (default on macOS), `SarvamTTS` (Bulbul v3 cloud TTS for Telugu/Indian languages and Raspberry Pi Zero), and `NullTTS`, synchronizing OLED mouth animation to actual WAV audio duration when available.
 - **Whisper-Quiet Servos**: Motor whining sounds are completely muted via `sound ""` configuration for clean, silent motion.
-- **Gemma-Talk Voice Assistant Bridge (`gemma_talk_bridge.py`)**: Non-blocking async WebSocket bridge connecting `gemma-talk` (Silero VAD, faster-whisper, Ollama, Kokoro TTS) to Gemma-Bot with barge-in preemption and Webots health monitoring.
+- **Integrated Sarvam Voice Pipeline (`voice_server/` + `voice_client/` + `gemma_talk_bridge.py`)**: Self-contained full-duplex voice assistant inside `gemma-bot` using Silero VAD, AI4Bharat/Whisper STT, **Sarvam AI** streaming LLM (`sarvam-105b`) & TTS (`bulbul:v3`), React web UI, and `/ws/events` bridge sync with barge-in preemption.
 - **High-Contrast OLED Screen & Selectable Color Themes**: 128×64 pixel display (`faces/`) shared with `scripts/generate_readme_assets.py` across 6 switchable themes.
 - **Phase-Based Gesture Engine (`gestures.py`)**: 19 unified phase-normalized trajectory gestures (`nod`, `shake`, `wiggle`, `curious`, `tilt_left`, `tilt_right`, `perk_up`, `droop`, `bounce`, `groove`, `shiver`, `scan`, `confused`, `bow`, `cheer`, `yawn`, `shy`, `peek_a_boo`, `dizzy_spin`).
 - **Hardened Multi-Threaded HTTP Command Server (`server.py`)**: Runs `ThreadingHTTPServer` on `127.0.0.1:8765` by default (configured via `config.py`) with `X-Bot-Token` authentication, 413 payload limits, and JSON schema validation.
@@ -68,6 +68,12 @@ pip install -r requirements.txt
 cp .env.example .env   # optional: customize ports, tokens, TTS, or Sarvam API key
 ```
 
+For full voice server dependencies (Silero VAD, STT, FastAPI/uvicorn):
+```bash
+pip install -r requirements-voice.txt
+cd voice_client && npm install && cd ..
+```
+
 For development and tests:
 ```bash
 pip install -r requirements-dev.txt
@@ -75,12 +81,11 @@ pytest
 ```
 
 ### 1-Command All-In-One Launcher
-To launch **everything** (Ollama, Webots simulation in real-time mode, Gemma-Talk voice backend, `gemma_talk_bridge.py` with logging to `logs/gemma_talk_bridge.log`, and web audio UI):
+To launch **everything** from within `gemma-bot` (Webots simulation in real-time mode, `voice_server` with Sarvam AI, `gemma_talk_bridge.py` with logging to `logs/gemma_talk_bridge.log`, and `voice_client` web UI):
 
 ```bash
 ./start_all.sh
 ```
-*(Or from `gemma-talk`, run `./start-with-bot.sh`).*
 
 When running, just speak naturally into your microphone! Press **Ctrl+C** anytime to cleanly stop all services.
 
@@ -89,19 +94,25 @@ When running, just speak naturally into your microphone! Press **Ctrl+C** anytim
 ## 🏗️ Architecture
 
 ```text
-+-------------------+      WS (:8000/ws)       +----------------------+
-| Gemma-Talk Server | -----------------------> | gemma_talk_bridge.py |
-| (VAD/STT/LLM/TTS) |   state/flush/sentence   | (async + health/back)|
-+-------------------+                          +----------+-----------+
-                                                          | HTTP POST /command
-+-------------------+   LLM / Keyword Intent              v  (X-Bot-Token)
-|  ai_assistant.py  | ---------------------------> +------+------------------+
-| (intent_parser.py)|                              | BotCommandHTTPServer    |
-+-------------------+                              | (ThreadingHTTPServer)   |
-                                                   +------+------------------+
-                                                          | COMMAND_QUEUE
-                                                          v
-+---------------------------------------------------------+------------------+
++-------------------+     WS (/ws) audio       +-----------------------------+
+|  voice_client/    | <======================> |       voice_server/         |
+|  (React + Vite)   |                          | Silero VAD + STT + Chunker  |
++-------------------+                          | Sarvam Streaming LLM + TTS  |
+                                               +--------------+--------------+
+                                                              | WS (/ws/events)
+                                                              v
++-------------------+   LLM / Keyword Intent   +--------------+--------------+
+|  ai_assistant.py  | --------------------+    |    gemma_talk_bridge.py     |
+| (intent_parser.py)|                     |    | (async + health/backoff)    |
++-------------------+                     |    +--------------+--------------+
+                                          v                   | HTTP POST /command
+                                   +------+-------------------+--+  (X-Bot-Token)
+                                   |     BotCommandHTTPServer    |
+                                   |    (ThreadingHTTPServer)    |
+                                   +--------------+--------------+
+                                                  | COMMAND_QUEUE
+                                                  v
++-------------------------------------------------+--------------------------+
 | Webots Controller (controllers/gemma_bot_controller/gemma_bot_controller.py)|
 |  - input_map.py (KEYMAP + edge-triggered head_touch)                       |
 |  - gestures.py  (phase-normalized GESTURES registry, p in [0, 1])          |
@@ -123,8 +134,14 @@ All defaults live in `config.py` and can be overridden via environment variables
 | `GEMMA_BOT_URL` | `http://<host>:<port>` | Base URL used by `ai_assistant.py` & bridge |
 | `GEMMA_BOT_TOKEN` | `""` | Shared secret checked via `X-Bot-Token` |
 | `GEMMA_MAX_BODY_BYTES` | `16384` | Max `/command` JSON body size before `413` |
-| `GEMMA_TALK_WS_URL` | `ws://localhost:8000/ws` | Gemma-Talk WebSocket endpoint |
-| `GEMMA_TALK_DIR` | `~/Documents/gemma-talk` | Path to local `gemma-talk` checkout |
+| `GEMMA_TALK_WS_URL` | `ws://127.0.0.1:8000/ws/events` | Voice server event stream URL for bridge |
+| `GEMMA_VOICE_HOST` | `0.0.0.0` | Integrated `voice_server` bind host |
+| `GEMMA_VOICE_PORT` | `8000` | Integrated `voice_server` port |
+| `GEMMA_VOICE_CLIENT_PORT` | `5173` | Integrated `voice_client` Vite port |
+| `GEMMA_VOICE_TTS_ENGINE` | `sarvam` if key set else `kokoro` | Voice server PCM synthesizer (`sarvam` or `kokoro`) |
+| `GEMMA_STT_ENGINE` | `sarvam` if key set else `ai4bharat` | Speech-to-text engine (`sarvam`, `ai4bharat`, or `whisper`) |
+| `GEMMA_SARVAM_STT_MODEL` | `saaras:v4` | Sarvam STT model (`POST /speech-to-text`) |
+| `GEMMA_MODELS_DIR` | `./voice_server/models` | Directory containing `silero_vad.onnx` (and optional Kokoro models) |
 | `WEBOTS_APP` | `/Applications/Webots.app/Contents/MacOS/webots` | Webots executable path |
 | `GEMMA_TTS_PROVIDER` | `mac_say` (macOS) / `null` (other) | `mac_say`, `sarvam`, or `null` |
 | `GEMMA_TTS_MAC_VOICE` | `Samantha` | macOS `say` voice name |
@@ -170,23 +187,24 @@ python3 ai_assistant.py --status
 
 ---
 
-## 🎙️ Reusing with Gemma-Talk (Voice Assistant Companion)
+## 🎙️ Running Voice Assistant Components Individually
 
-Gemma-Bot integrates directly with **Gemma-Talk** (`$GEMMA_TALK_DIR`), transforming your local voice assistant into an expressive physical desktop buddy:
-
-1. **Start Gemma-Talk Backend Server**:
+1. **Start the Integrated Sarvam Voice Server**:
    ```bash
-   cd "$GEMMA_TALK_DIR"
-   ./start-server.sh
+   python3 -m uvicorn voice_server.main:app --host 0.0.0.0 --port 8000
    ```
-2. **Start the Bridge in Gemma-Bot**:
+2. **Start the Bridge**:
    ```bash
    python3 gemma_talk_bridge.py
    ```
-3. **Open Gemma-Talk in your browser** (`http://localhost:5173`).
+3. **Start the Web UI (`voice_client/`)**:
+   ```bash
+   cd voice_client && npm run dev
+   ```
+   Open `http://localhost:5173`:
    - When you speak, Gemma-Bot enters **LISTENING** mode (head perks up, eyes focus).
-   - When Ollama generates the response, Gemma-Bot enters **THINKING** mode (curious head tilt, eyes look up with thinking dots).
-   - When Kokoro synthesizes speech, Gemma-Bot enters **SPEAKING** mode (animated lip-sync, happy smile, conversational nodding).
+   - When Sarvam AI streams the response, Gemma-Bot enters **THINKING** mode (curious head tilt, eyes look up with thinking dots).
+   - When audio plays, Gemma-Bot enters **SPEAKING** mode (animated lip-sync, happy smile, conversational nodding).
    - When you interrupt (barge-in), Gemma-Bot instantly silences speech, halts its mouth, and blinks attentively!
 
 ---
