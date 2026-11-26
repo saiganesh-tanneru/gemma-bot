@@ -506,14 +506,14 @@ def write_logo() -> None:
     TEX_DIR.mkdir(parents=True, exist_ok=True)
     image = Image.new("RGBA", (512, 128), (0, 0, 0, 0))
     draw = ImageDraw.Draw(image)
-    font = ImageFont.truetype("/usr/share/fonts/truetype/macos/Inter-SemiBold.ttf", 78)
-    letters = list("GEMA")
+    font = ImageFont.truetype("/usr/share/fonts/truetype/macos/Inter-SemiBold.ttf", 58)
+    letters = list("GemaBot")
     widths = [draw.textlength(ch, font=font) for ch in letters]
-    tracking = 18
+    tracking = 4
     total = sum(widths) + tracking * (len(letters) - 1)
     x = (512 - total) / 2
     for ch, width in zip(letters, widths):
-        draw.text((x, 22), ch, font=font, fill=(214, 214, 218, 255))
+        draw.text((x, 32), ch, font=font, fill=(0x40, 0x40, 0x42, 255))
         x += width + tracking
     image.save(TEX_DIR / "logo_gema.png")
 
@@ -542,11 +542,11 @@ def robot_proto(base: Mesh, front: Mesh, back: Mesh, cap_f: Mesh, cap_b: Mesh, b
     # PBRAppearance is not a legal Robot child, so each material is DEF'd on first use.
     defined: set[str] = set()
     material_body = {
-        "CHARCOAL": "baseColor 0.145 0.145 0.152 roughness 0.62 metalness 0.04",
+        "CHARCOAL": "baseColor 0.007 0.007 0.008 roughness 0.62 metalness 0",
         "CHARCOAL_DARK": "baseColor 0.035 0.035 0.038 roughness 0.55 metalness 0.02",
-        "GRAPHITE": "baseColor 0.105 0.105 0.112 roughness 0.32 metalness 0.42",
-        "ACCENT": "baseColor 0.86 0.45 0.32 roughness 0.38 metalness 0.02",
-        "LED": "baseColor 0.95 0.40 0.18 roughness 0.35 emissiveColor 1 0.42 0.12 emissiveIntensity 3.5",
+        "GRAPHITE": "baseColor 0.01 0.01 0.011 roughness 0.28 metalness 0.4",
+        "ACCENT": "baseColor 0.85 0.17 0.015 roughness 0.35 metalness 0",
+        "LED": "baseColor 0.9 0.25 0.03 roughness 0.35 emissiveColor 1 0.32 0.04 emissiveIntensity 3.5",
         "MIC": "baseColor 0.02 0.02 0.022 roughness 0.45 metalness 0.1",
         "BEZEL": "baseColor 0.012 0.012 0.014 roughness 0.25 metalness 0.05",
         "LOGO_MAT": (
@@ -596,7 +596,7 @@ def robot_proto(base: Mesh, front: Mesh, back: Mesh, cap_f: Mesh, cap_b: Mesh, b
     taper = math.atan((BASE_R_BOT - BASE_R_TOP) / BASE_H)
     lz = 0.034
     ly = -(base_radius(lz) + 0.0006)
-    logo_w, logo_h = 0.030, 0.0072
+    logo_w, logo_h = 0.038, 0.0072
     # Local quad in XZ, then the Pose below rotates it onto the wall.
     logo_block = (
         "Pose {\n"
@@ -629,7 +629,7 @@ def robot_proto(base: Mesh, front: Mesh, back: Mesh, cap_f: Mesh, cap_b: Mesh, b
     neck_visuals = "\n".join(
         [
             cyl(app("GRAPHITE"), NECK_R + 0.006, 0.004, "0 0 0.002", "1 0 0 1.57079632679", 48),
-            cyl(app("GRAPHITE"), NECK_R, 0.046, "0 0 0.023", "1 0 0 1.57079632679", 48),
+            cyl(app("GRAPHITE"), NECK_R, 0.022, "0 0 0.011", "1 0 0 1.57079632679", 48),
         ]
     )
     head_bits = "\n".join(
@@ -679,26 +679,29 @@ def robot_proto(base: Mesh, front: Mesh, back: Mesh, cap_f: Mesh, cap_b: Mesh, b
           }}
         }}"""
 
+    # Webots cameras look along local +X. Rz(-90) aims +X out of the face (-Y).
     camera = """Camera {
-          translation 0 -0.0392 0.026
-          rotation 1 0 0 -1.57079632679
+          translation 0 -0.0375 0.033
+          rotation 0 0 1 -1.57079632679
           children [
             Pose {
+              translation -0.0012 0 0
               rotation 0 0 1 1.57079632679
               children [
                 Shape {
                   appearance USE MIC
                   geometry Cylinder {
-                    height 0.0022
-                    radius 0.0024
-                    subdivision 24
+                    height 0.002
+                    radius 0.0022
+                    subdivision 20
                   }
                 }
               ]
             }
           ]
           name "camera"
-          fieldOfView 1
+          fieldOfView 1.40
+          near 0.05
           width 160
           height 120
         }"""
@@ -752,8 +755,8 @@ PROTO GemaBotReview [
               jointParameters HingeJointParameters {{
                 axis 1 0 0
                 anchor 0 0 { _r(head_z) }
-                minStop -0.45
-                maxStop 0.45
+                minStop -0.52
+                maxStop 0.42
               }}
               device [
                 RotationalMotor {{
@@ -786,11 +789,11 @@ PROTO GemaBotReview [
             }}
           ]
           boundingObject Pose {{
-            translation 0 0 0.017
+            translation 0 0 0.011
             rotation 1 0 0 1.57079632679
             children [
               Cylinder {{
-                height 0.034
+                height 0.022
                 radius 0.024
               }}
             ]
@@ -840,9 +843,9 @@ PROTO GemaClockDock [
         children [
           Shape {{
             appearance DEF DOCK_LED PBRAppearance {{
-              baseColor 0.95 0.40 0.18
+              baseColor 0.9 0.25 0.03
               roughness 0.35
-              emissiveColor 1 0.42 0.12
+              emissiveColor 1 0.32 0.04
               emissiveIntensity 3.2
             }}
             geometry Box {{

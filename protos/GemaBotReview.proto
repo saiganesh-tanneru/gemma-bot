@@ -19,7 +19,7 @@ PROTO GemaBotReview [
     supervisor IS supervisor
     children [
       Shape {
-        appearance DEF CHARCOAL PBRAppearance { baseColor 0.145 0.145 0.152 roughness 0.62 metalness 0.04 }
+        appearance DEF CHARCOAL PBRAppearance { baseColor 0.007 0.007 0.008 roughness 0.62 metalness 0 }
         geometry           IndexedFaceSet {
                   coord Coordinate {
                     point [
@@ -4357,7 +4357,7 @@ Pose {
           rotation 1 0 0 1.57079632679
           children [
             Shape {
-              appearance DEF LED PBRAppearance { baseColor 0.95 0.40 0.18 roughness 0.35 emissiveColor 1 0.42 0.12 emissiveIntensity 3.5 }
+              appearance DEF LED PBRAppearance { baseColor 0.9 0.25 0.03 roughness 0.35 emissiveColor 1 0.32 0.04 emissiveIntensity 3.5 }
               geometry Cylinder {
                 height 0.00215
                 radius 0.046593
@@ -4385,7 +4385,7 @@ Pose {
           rotation 1 0 0 1.57079632679
           children [
             Shape {
-              appearance DEF ACCENT PBRAppearance { baseColor 0.86 0.45 0.32 roughness 0.38 metalness 0.02 }
+              appearance DEF ACCENT PBRAppearance { baseColor 0.85 0.17 0.015 roughness 0.35 metalness 0 }
               geometry Cylinder {
                 height 0.0022
                 radius 0.0032
@@ -4403,10 +4403,10 @@ Pose {
               geometry IndexedFaceSet {
                 coord Coordinate {
                   point [
-                    -0.015 0 -0.0036
-                    0.015 0 -0.0036
-                    0.015 0 0.0036
-                    -0.015 0 0.0036
+                    -0.019 0 -0.0036
+                    0.019 0 -0.0036
+                    0.019 0 0.0036
+                    -0.019 0 0.0036
                   ]
                 }
                 texCoord TextureCoordinate {
@@ -4445,7 +4445,7 @@ Pose {
           rotation 1 0 0 1.57079632679
           children [
             Shape {
-              appearance DEF GRAPHITE PBRAppearance { baseColor 0.105 0.105 0.112 roughness 0.32 metalness 0.42 }
+              appearance DEF GRAPHITE PBRAppearance { baseColor 0.01 0.01 0.011 roughness 0.28 metalness 0.4 }
               geometry Cylinder {
                 height 0.004
                 radius 0.029
@@ -4455,13 +4455,13 @@ Pose {
           ]
         }
 Pose {
-          translation 0 0 0.023
+          translation 0 0 0.011
           rotation 1 0 0 1.57079632679
           children [
             Shape {
               appearance USE GRAPHITE
               geometry Cylinder {
-                height 0.046
+                height 0.022
                 radius 0.023
                 subdivision 48
               }
@@ -4472,8 +4472,8 @@ Pose {
               jointParameters HingeJointParameters {
                 axis 1 0 0
                 anchor 0 0 0.08
-                minStop -0.45
-                maxStop 0.45
+                minStop -0.52
+                maxStop 0.42
               }
               device [
                 RotationalMotor {
@@ -5659,25 +5659,27 @@ Pose {
           }
         }
                   Camera {
-          translation 0 -0.0392 0.026
-          rotation 1 0 0 -1.57079632679
+          translation 0 -0.0375 0.033
+          rotation 0 0 1 -1.57079632679
           children [
             Pose {
+              translation -0.0012 0 0
               rotation 0 0 1 1.57079632679
               children [
                 Shape {
                   appearance USE MIC
                   geometry Cylinder {
-                    height 0.0022
-                    radius 0.0024
-                    subdivision 24
+                    height 0.002
+                    radius 0.0022
+                    subdivision 20
                   }
                 }
               ]
             }
           ]
           name "camera"
-          fieldOfView 1
+          fieldOfView 1.40
+          near 0.05
           width 160
           height 120
         }
@@ -5693,11 +5695,11 @@ Pose {
             }
           ]
           boundingObject Pose {
-            translation 0 0 0.017
+            translation 0 0 0.011
             rotation 1 0 0 1.57079632679
             children [
               Cylinder {
-                height 0.034
+                height 0.022
                 radius 0.024
               }
             ]

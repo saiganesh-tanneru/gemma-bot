@@ -48,7 +48,7 @@ Optional: `cp .env.example .env` and set `SARVAM_API_KEY` there. `config.py` loa
 2. **File → Open World…** and choose `worlds/gemabot_review_plan.wbt`.
 3. Press **Play**.
 
-The controller binds the existing command server on `http://127.0.0.1:8765` (`GEMMA_BOT_HOST` / `GEMMA_BOT_PORT`). In the console you should see `Gemma-Bot Desktop Companion Initialized`.
+The controller binds the existing command server on `http://127.0.0.1:8765` (`GEMMA_BOT_HOST` / `GEMMA_BOT_PORT`). In the console you should see `🤖 Gemma-Bot Desktop Companion Initialized with AI Integration!`.
 
 On Linux the Webots binary is often `/usr/local/webots/webots`. The Mac default in `config.py` is `/Applications/Webots.app/Contents/MacOS/webots`. Point `WEBOTS_APP` at whichever one you have before using the launcher below.
 

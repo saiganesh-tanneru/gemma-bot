@@ -272,9 +272,9 @@ PROTO GemaClockDock [
         children [
           Shape {
             appearance DEF DOCK_LED PBRAppearance {
-              baseColor 0.95 0.40 0.18
+              baseColor 0.9 0.25 0.03
               roughness 0.35
-              emissiveColor 1 0.42 0.12
+              emissiveColor 1 0.32 0.04
               emissiveIntensity 3.2
             }
             geometry Box {
