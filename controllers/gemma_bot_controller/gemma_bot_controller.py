@@ -1,6 +1,6 @@
 """
 Gemma-Bot Desktop Companion Controller for Webots.
-Coordinates Webots hardware devices, modular OLED face rendering,
+Coordinates the hardware abstraction layer, modular OLED face rendering,
 phase-based gesture trajectories, keyboard/touch input, and HTTP AI commands.
 """
 
@@ -20,12 +20,14 @@ for _path in (_CONTROLLER_DIR, _REPO_ROOT):
         sys.path.insert(0, _path)
 
 import config
+from hal import Hardware, build_webots_hardware
+from hal.face_target import FaceDrawTarget
+from hal.types import AXIS_PITCH, AXIS_YAW
 from faces import (
     EMOJI_MOOD_MAP,
     SCREEN_THEMES,
     THEME_KEYS,
     FaceRenderer,
-    WebotsDisplayTarget,
     resolve_mood,
 )
 from gestures import GESTURE_DEFAULT_MOOD, GESTURES, resolve_gesture
@@ -54,36 +56,67 @@ __all__ = [
 
 
 class GemmaBotCompanion:
-    """Main Webots companion robot controller."""
+    """Main Webots companion robot controller.
 
-    def __init__(self, start_server: bool = True, tts_provider: Optional[TTSProvider] = None):
+    Servos, the face panel, touch, the camera enable, the speaker, and the
+    other device readings go through ``self.hardware``. The Webots keyboard
+    stays a sim input. Raw device attributes remain so existing tests can
+    poke ``touch.value`` and ``display.ops`` on the same objects the Webots
+    drivers wrap.
+    """
+
+    YAW_SPEED = 3.0
+    PITCH_SPEED = 2.5
+    # Applied only when a thermal sensor is present. The sim has none.
+    THROTTLE_SPEED_SCALE = {
+        "normal": 1.0,
+        "reduced": 0.7,
+        "limited": 0.4,
+    }
+
+    def __init__(
+        self,
+        start_server: bool = True,
+        tts_provider: Optional[TTSProvider] = None,
+        *,
+        hardware: Optional[Hardware] = None,
+    ):
         self.robot = Supervisor()
         self.timestep = int(self.robot.getBasicTimeStep())
 
-        # Hardware devices
+        # Raw Webots devices. Motion, drawing, and touch reads go through HAL.
         self.display = self.robot.getDevice("oled_display")
         self.camera = self.robot.getDevice("camera")
         self.yaw_motor = self.robot.getDevice("head_yaw")
         self.pitch_motor = self.robot.getDevice("head_pitch")
         self.touch = self.robot.getDevice("head_touch")
 
-        if self.display:
-            self.display.setOpacity(1.0)
-            self.display.setAlpha(1.0)
-        if self.camera:
-            self.camera.enable(self.timestep * 2)
-        if self.touch:
-            self.touch.enable(self.timestep)
+        if hardware is None:
+            hardware = build_webots_hardware(
+                self.robot,
+                timestep_ms=self.timestep,
+                display=self.display,
+                camera=self.camera,
+                yaw_motor=self.yaw_motor,
+                pitch_motor=self.pitch_motor,
+                touch=self.touch,
+            )
+        self.hardware = hardware
+
+        self.hardware.display.set_opacity(1.0)
+        self.hardware.display.set_alpha(1.0)
+        self.hardware.camera.enable(self.timestep * 2)
+        self.hardware.touch.enable(self.timestep)
 
         self.keyboard = self.robot.getKeyboard()
         self.keyboard.enable(self.timestep)
         self.keymap = build_keymap(Keyboard)
 
-        # Motor setup
-        self.yaw_motor.setPosition(0.0)
-        self.pitch_motor.setPosition(0.0)
-        self.yaw_motor.setVelocity(3.0)
-        self.pitch_motor.setVelocity(2.5)
+        # Motor setup. Speeds drop only when thermal.state().sensor_present.
+        self._speed_scale = None
+        self._apply_servo_speeds()
+        self.hardware.head.set_position(AXIS_YAW, 0.0)
+        self.hardware.head.set_position(AXIS_PITCH, 0.0)
 
         # Head position targets
         self.cur_yaw = 0.0
@@ -94,7 +127,7 @@ class GemmaBotCompanion:
         # OLED renderer
         self.disp_w = 128
         self.disp_h = 64
-        target = WebotsDisplayTarget(self.display) if self.display else None
+        target = FaceDrawTarget(self.hardware.display)
         self.renderer = FaceRenderer(target, theme="CYAN", disp_w=self.disp_w, disp_h=self.disp_h)
         self._sync_theme_fields()
 
@@ -126,7 +159,26 @@ class GemmaBotCompanion:
         # Background HTTP AI command server
         self.server = start_command_server(config.BOT_PORT, config.BOT_HOST) if start_server else None
 
+        self.hardware_status = {}
+        self._refresh_hardware_status()
         self.render_face()
+
+    def _servo_speed_scale(self) -> float:
+        thermal = self.hardware.thermal.state()
+        if not thermal.sensor_present:
+            return 1.0
+        return self.THROTTLE_SPEED_SCALE.get(thermal.throttle, 1.0)
+
+    def _apply_servo_speeds(self) -> None:
+        scale = self._servo_speed_scale()
+        if scale == self._speed_scale:
+            return
+        self._speed_scale = scale
+        self.hardware.head.set_velocity(AXIS_YAW, self.YAW_SPEED * scale)
+        self.hardware.head.set_velocity(AXIS_PITCH, self.PITCH_SPEED * scale)
+
+    def _refresh_hardware_status(self) -> None:
+        self.hardware_status = self.hardware.snapshot()
 
         print("=" * 65)
         print("🤖 Gemma-Bot Desktop Companion Initialized with AI Integration!")
@@ -164,6 +216,9 @@ class GemmaBotCompanion:
         if self.speech_handle is not None:
             self.speech_handle.stop()
             self.speech_handle = None
+        # Clips use the speaker HAL. TTS stays the synthesizer and is stopped
+        # via speech_handle so `say` / WAV playback is unchanged.
+        self.hardware.audio_out.stop()
 
         handle = self.tts_provider.speak(self.speech_text, play_audio=play_audio)
         self.speech_handle = handle
@@ -178,6 +233,7 @@ class GemmaBotCompanion:
 
     def interrupt_speech(self) -> None:
         """Immediately silences speech playback and halts lip-sync."""
+        self.hardware.audio_out.stop()
         if self.speech_handle is not None:
             self.speech_handle.stop()
             self.speech_handle = None
@@ -312,6 +368,7 @@ class GemmaBotCompanion:
 
     def update_animation(self) -> None:
         """Updates head servo positions, gestures, blinks, and timers."""
+        self._apply_servo_speeds()
         self.idle_timer += 1
 
         # 1. Blink cycle
@@ -395,8 +452,8 @@ class GemmaBotCompanion:
         alpha = 0.22 if self.active_gesture else 0.12
         self.cur_yaw += (self.target_yaw - self.cur_yaw) * alpha
         self.cur_pitch += (self.target_pitch - self.cur_pitch) * alpha
-        self.yaw_motor.setPosition(self.cur_yaw)
-        self.pitch_motor.setPosition(self.cur_pitch)
+        self.hardware.head.set_position(AXIS_YAW, self.cur_yaw)
+        self.hardware.head.set_position(AXIS_PITCH, self.cur_pitch)
 
         # Update shared state for HTTP status reporting
         ROBOT_STATE["mood"] = self.mood
@@ -408,6 +465,7 @@ class GemmaBotCompanion:
         ROBOT_STATE["gaze"] = [round(self.gaze_x, 2), round(self.gaze_y, 2)]
         ROBOT_STATE["is_speaking"] = self.speech_timer > 0
         ROBOT_STATE["speech_text"] = self.speech_text if self.speech_timer > 0 else ""
+        self._refresh_hardware_status()
 
     def handle_keyboard_input(self) -> None:
         """Processes manual keyboard and rising-edge touch input."""
@@ -418,7 +476,7 @@ class GemmaBotCompanion:
                 apply_key_action(self, action)
             key = self.keyboard.getKey()
 
-        is_touched = bool(self.touch and self.touch.getValue() > 0.5)
+        is_touched = self.hardware.touch.is_pressed()
         if is_touched and not self._was_touched:
             self.mood = "HAPPY"
             self.idle_timer = 0
@@ -426,6 +484,7 @@ class GemmaBotCompanion:
             self.trigger_blink()
             print("Head Touched! -> HAPPY")
         self._was_touched = is_touched
+        self._refresh_hardware_status()
 
     def run(self) -> None:
         """Main simulation execution loop."""

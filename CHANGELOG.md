@@ -3,6 +3,7 @@
 All notable changes to **Gemma-Bot** are documented in this file by phase.
 
 ## Unreleased
+- **Hardware abstraction layer (`hal/`, `HAL.md`)**: Interfaces for the head (yaw/pitch, roll as a capability), display (mono 128×64 or color), speaker, microphone with a hardware mute flag, touch, LEDs, power (battery/USB/dock and voltage dip), thermal throttle, online/offline link state, RTC/clock validity, and atomic config. Webots adapters keep the current sim behavior. In-memory mocks cover the same interfaces for tests. The controller drives servos, the face, touch, the camera enable, and clip stop through the bundle.
 - **Launcher wait timeouts (`start_all.sh`)**: Added a `wait_for` helper with bounded waits and loud failures — Ollama (8s), Webots (15s), and Gemma-Talk backend (60s) now exit non-zero instead of printing success after a timeout or waiting forever; the Web UI wait (10s) warns instead of failing silently.
 - **Sarvam chat endpoint (`config.py`)**: Changed the default `SARVAM_CHAT_URL` from `/v2/chat/completions` to `/v1/chat/completions` — /v1 is the preferred endpoint for sarvam-105b (some /v2 requests to it stall without an answer).
 - **Offline-safe tests (`tests/conftest.py`)**: Test sessions now force the keyword intent provider and remove `SARVAM_API_KEY`, so tests never hit the live Sarvam API; added a regression test in `tests/test_ai_assistant.py`.

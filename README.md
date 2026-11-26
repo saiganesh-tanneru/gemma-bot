@@ -103,12 +103,15 @@ When running, just speak naturally into your microphone! Press **Ctrl+C** anytim
                                                           v
 +---------------------------------------------------------+------------------+
 | Webots Controller (controllers/gemma_bot_controller/gemma_bot_controller.py)|
+|  - hal/         (device interfaces, Webots adapters, in-memory mocks)      |
 |  - input_map.py (KEYMAP + edge-triggered head_touch)                       |
 |  - gestures.py  (phase-normalized GESTURES registry, p in [0, 1])          |
 |  - faces/       (FaceRenderer shared with scripts/generate_readme_assets)  |
 |  - tts.py       (MacSayTTS / SarvamTTS / NullTTS -> audio-duration lipsync)|
 +----------------------------------------------------------------------------+
 ```
+
+Device interfaces, the Webots adapters, and the in-memory mocks are documented in [`HAL.md`](HAL.md).
 
 ---
 
