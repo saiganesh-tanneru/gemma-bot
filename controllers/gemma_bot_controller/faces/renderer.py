@@ -94,11 +94,11 @@ class FaceRenderer:
         self.draw_filled_box(x + w - corner_r, y + corner_r, corner_r, h - 2 * corner_r, col)
 
     def draw_happy_eye(self, cx, cy, w):
-        x = cx - w / 2
-        self.draw_filled_box(x, cy - 2, w, 7, self.eye_color)
-        self.draw_filled_box(x + 2, cy - 5, w - 4, 4, self.eye_color)
-        self.draw_filled_box(x + 5, cy - 7, w - 10, 3, self.eye_color)
-        self.draw_filled_box(x + 3, cy, w - 6, 8, self.bg_color)
+        """Large soft oval with a white highlight, matching the review-plan face."""
+        h = max(self.eye_h, w * 1.05)
+        self.draw_rounded_eye(cx, cy, w, h, corner_r=min(w, h) * 0.46)
+        dot = max(3, int(w * 0.16))
+        self.draw_filled_box(cx - w * 0.28, cy - h * 0.22, dot, dot, self.white)
 
     def draw_sleepy_eye(self, cx, cy, w):
         x = cx - w / 2
@@ -273,9 +273,13 @@ class FaceRenderer:
             self.draw_angry_eye(rcx, cy, self.eye_w, effective_h, is_left=False)
             self.draw_filled_box(self.disp_w / 2 - 5, cy + 17, 10, 3, self.mouth_color)
         else:
-            self.draw_rounded_eye(lcx, cy, self.eye_w, effective_h, corner_r=6)
-            self.draw_rounded_eye(rcx, cy, self.eye_w, effective_h, corner_r=6)
-            self.draw_filled_box(self.disp_w / 2 - 5, cy + 17, 10, 2, self.mouth_color)
+            self.draw_happy_eye(lcx, cy, self.eye_w)
+            self.draw_happy_eye(rcx, cy, self.eye_w)
+            self.draw_filled_box(self.disp_w / 2 - 8, cy + 16, 3, 2, self.mouth_color)
+            self.draw_filled_box(self.disp_w / 2 - 6, cy + 18, 4, 2, self.mouth_color)
+            self.draw_filled_box(self.disp_w / 2 - 2, cy + 19, 4, 2, self.mouth_color)
+            self.draw_filled_box(self.disp_w / 2 + 2, cy + 18, 4, 2, self.mouth_color)
+            self.draw_filled_box(self.disp_w / 2 + 5, cy + 16, 3, 2, self.mouth_color)
 
         if speech_timer > 0:
             mouth_phase = speech_timer * 0.4

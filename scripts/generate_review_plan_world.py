@@ -39,14 +39,14 @@ BASE_R_BOT = 0.048
 BASE_R_TOP = 0.042
 NECK_H = 0.040
 NECK_R = 0.023
-HEAD_W = 0.095
+HEAD_W = 0.104  # 30% wider than the 80 mm height
 HEAD_H = 0.080
-HEAD_D = 0.075
-HEAD_BEVEL = 0.009
-SCR_W = 0.074
-SCR_H = 0.058
-IMG_W = 0.065
-IMG_H = 0.049
+HEAD_D = 0.086
+HEAD_BEVEL = 0.016
+SCR_W = 0.078  # about 75% of the front face
+SCR_H = 0.060
+IMG_W = 0.078
+IMG_H = 0.060
 DOCK = 0.099
 DOCK_H = 0.016
 SEAM_FROM_FRONT = 0.013
@@ -168,14 +168,32 @@ class Mesh:
             uv_block = (
                 f"\n{indent}texCoord TextureCoordinate {{\n{indent}  point [\n{uvs}\n{indent}  ]\n{indent}}}"
             )
+        normals = self._smooth_normals()
+        normal_vs = "\n".join(indent + "  " + " ".join(_r(c) for c in n) for n in normals)
         return (
             f"IndexedFaceSet {{\n"
             f"{indent}coord Coordinate {{\n{indent}  point [\n{points}\n{indent}  ]\n{indent}}}"
+            f"\n{indent}normal Normal {{\n{indent}  vector [\n{normal_vs}\n{indent}  ]\n{indent}}}"
             f"{uv_block}\n"
             f"{indent}coordIndex [\n{faces}\n{indent}]\n"
+            f"{indent}normalIndex [\n{faces}\n{indent}]\n"
             f"{indent}creaseAngle { _r(crease) }\n"
             f"{indent}}}"
         )
+
+    def _smooth_normals(self):
+        acc = [[0.0, 0.0, 0.0] for _ in self.verts]
+        for a, b, c in self.tris:
+            n = _cross(_sub(self.verts[b], self.verts[a]), _sub(self.verts[c], self.verts[a]))
+            for i in (a, b, c):
+                acc[i][0] += n[0]
+                acc[i][1] += n[1]
+                acc[i][2] += n[2]
+        out = []
+        for v in acc:
+            n = _norm((v[0], v[1], v[2]))
+            out.append(n if _dot(n, n) > 0.5 else (0.0, -1.0, 0.0))
+        return out
 
 
 def shape(appearance: str, geometry: str, indent: str = "        ") -> str:
@@ -445,8 +463,8 @@ def emit_indexed(name_comment: str, appearance: str, mesh: Mesh, crease: float) 
 
 def build_head_meshes():
     half = (HEAD_W / 2, HEAD_D / 2, HEAD_H / 2)
-    # Few segments: a dense grid flat-shades into a chevron pattern in Webots' software renderer.
-    head = rounded_box(half, HEAD_BEVEL, 5)
+    # High segment count plus smooth normals: a soft fillet without a faceted chamfer.
+    head = rounded_box(half, HEAD_BEVEL, 14)
     seam = -HEAD_D / 2 + SEAM_FROM_FRONT
     front = clip_mesh(head, 1, seam, keep_below=True)
     back = clip_mesh(head, 1, seam + SEAM_GAP, keep_below=False)
@@ -457,12 +475,12 @@ def build_head_meshes():
 
 
 def build_screen() -> Mesh:
-    # Proud of the head's front face so the panel is not hidden inside the shell.
-    return rounded_rect(IMG_W, IMG_H, 0.0065, -HEAD_D / 2 - 0.0008, facing=-1, segments=6)
+    # Glossy panel just in front of the shell, inside the bezel lip.
+    return rounded_rect(IMG_W - 0.006, IMG_H - 0.006, 0.012, -HEAD_D / 2 - 0.0014, facing=-1, segments=10)
 
 
 def build_bezel() -> Mesh:
-    return rounded_rect(SCR_W - 0.0012, SCR_H - 0.0012, 0.0075, -HEAD_D / 2 - 0.00035, facing=-1, segments=5)
+    return rounded_rect(SCR_W, SCR_H, 0.014, -HEAD_D / 2 - 0.0006, facing=-1, segments=10)
 
 
 def build_dock_mesh() -> Mesh:
@@ -506,16 +524,31 @@ def write_logo() -> None:
     TEX_DIR.mkdir(parents=True, exist_ok=True)
     image = Image.new("RGBA", (512, 128), (0, 0, 0, 0))
     draw = ImageDraw.Draw(image)
-    font = ImageFont.truetype("/usr/share/fonts/truetype/macos/Inter-SemiBold.ttf", 58)
-    letters = list("GemaBot")
+    font = ImageFont.truetype("/usr/share/fonts/truetype/macos/Inter-SemiBold.ttf", 72)
+    letters = list("GEMA")
     widths = [draw.textlength(ch, font=font) for ch in letters]
-    tracking = 4
+    tracking = 14
     total = sum(widths) + tracking * (len(letters) - 1)
     x = (512 - total) / 2
     for ch, width in zip(letters, widths):
-        draw.text((x, 32), ch, font=font, fill=(0x40, 0x40, 0x42, 255))
+        draw.text((x, 24), ch, font=font, fill=(0xD9, 0xD9, 0xD9, 255))
         x += width + tracking
     image.save(TEX_DIR / "logo_gema.png")
+
+
+def write_face() -> None:
+    """Soft light-blue face, drawn large and scaled so the panel is not a pixel grid."""
+    w, h = 1024, 788
+    image = Image.new("RGB", (w, h), (6, 7, 10))
+    draw = ImageDraw.Draw(image)
+    eye = (0x8E, 0xC9, 0xDB)
+    for cx in (int(w * 0.31), int(w * 0.69)):
+        ew, eh = 300, 360
+        box = [cx - ew // 2, 150, cx + ew // 2, 150 + eh]
+        draw.rounded_rectangle(box, radius=140, fill=eye)
+        draw.ellipse([cx - ew // 2 + 48, 210, cx - ew // 2 + 128, 290], fill=(255, 255, 255))
+    draw.arc([w // 2 - 110, 560, w // 2 + 110, 700], start=15, end=165, fill=eye, width=18)
+    image.save(TEX_DIR / "face_screen.png")
 
 
 def copy_textures() -> tuple[float, float]:
@@ -542,11 +575,11 @@ def robot_proto(base: Mesh, front: Mesh, back: Mesh, cap_f: Mesh, cap_b: Mesh, b
     # PBRAppearance is not a legal Robot child, so each material is DEF'd on first use.
     defined: set[str] = set()
     material_body = {
-        "CHARCOAL": "baseColor 0.007 0.007 0.008 roughness 0.62 metalness 0",
-        "CHARCOAL_DARK": "baseColor 0.035 0.035 0.038 roughness 0.55 metalness 0.02",
+        "CHARCOAL": "baseColor 0.18 0.18 0.19 roughness 0.6 metalness 0",
+        "CHARCOAL_DARK": "baseColor 0.10 0.10 0.11 roughness 0.55 metalness 0",
         "GRAPHITE": "baseColor 0.01 0.01 0.011 roughness 0.28 metalness 0.4",
-        "ACCENT": "baseColor 0.85 0.17 0.015 roughness 0.35 metalness 0",
-        "LED": "baseColor 0.9 0.25 0.03 roughness 0.35 emissiveColor 1 0.32 0.04 emissiveIntensity 3.5",
+        "ACCENT": "baseColor 0.941 0.541 0.294 roughness 0.42 metalness 0",
+        "LED": "baseColor 0.95 0.55 0.35 roughness 0.4 emissiveColor 1 0.55 0.35 emissiveIntensity 2.2",
         "MIC": "baseColor 0.02 0.02 0.022 roughness 0.45 metalness 0.1",
         "BEZEL": "baseColor 0.012 0.012 0.014 roughness 0.25 metalness 0.05",
         "LOGO_MAT": (
@@ -554,9 +587,9 @@ def robot_proto(base: Mesh, front: Mesh, back: Mesh, cap_f: Mesh, cap_b: Mesh, b
             'url [ "textures/logo_gema.png" ] repeatS FALSE repeatT FALSE }'
         ),
         "SCREEN_MAT": (
-            "baseColor 0 0 0 roughness 0.18 metalness 0 emissiveIntensity 1.6 "
-            'baseColorMap DEF FACE_TEX ImageTexture { url [ "textures/face_happy.png" ] '
-            "repeatS FALSE repeatT FALSE filtering 0 } emissiveColorMap USE FACE_TEX"
+            "baseColor 0.02 0.02 0.025 roughness 0.08 metalness 0.12 emissiveIntensity 0.55 "
+            'baseColorMap DEF FACE_TEX ImageTexture { url [ "textures/face_screen.png" ] '
+            "repeatS FALSE repeatT FALSE filtering 4 } emissiveColorMap USE FACE_TEX"
         ),
     }
 
@@ -600,7 +633,7 @@ def robot_proto(base: Mesh, front: Mesh, back: Mesh, cap_f: Mesh, cap_b: Mesh, b
     # Local quad in XZ, then the Pose below rotates it onto the wall.
     logo_block = (
         "Pose {\n"
-        f"          translation 0 { _r(ly) } { _r(lz) }\n"
+        f"          translation 0.016 { _r(ly) } 0.026\n"
         f"          rotation 1 0 0 { _r(taper) }\n"
         "          children [\n"
         "            Shape {\n"
@@ -639,10 +672,10 @@ def robot_proto(base: Mesh, front: Mesh, back: Mesh, cap_f: Mesh, cap_b: Mesh, b
             emit_indexed("cap f", app("CHARCOAL_DARK"), cap_f, 0.4),
             emit_indexed("cap b", app("CHARCOAL_DARK"), cap_b, 0.4),
             emit_indexed("bezel", app("BEZEL"), bezel, 0.5),
-            cyl(app("ACCENT"), 0.014, 0.004, f"{_r(HEAD_W/2 + 0.0012)} 0 0", "0 0 1 1.57079632679", 40),
-            cyl(app("ACCENT"), 0.014, 0.004, f"{_r(-(HEAD_W/2 + 0.0012))} 0 0", "0 0 1 1.57079632679", 40),
-            cyl(app("GRAPHITE"), 0.005, 0.0012, f"{_r(HEAD_W/2 + 0.0034)} 0 0", "0 0 1 1.57079632679", 32),
-            cyl(app("GRAPHITE"), 0.005, 0.0012, f"{_r(-(HEAD_W/2 + 0.0034))} 0 0", "0 0 1 1.57079632679", 32),
+            cyl(app("ACCENT"), 0.018, 0.007, f"{_r(HEAD_W/2 + 0.0022)} 0 0", "0 0 1 1.57079632679", 48),
+            cyl(app("ACCENT"), 0.018, 0.007, f"{_r(-(HEAD_W/2 + 0.0022))} 0 0", "0 0 1 1.57079632679", 48),
+            cyl(app("CHARCOAL_DARK"), 0.008, 0.002, f"{_r(HEAD_W/2 + 0.0052)} 0 0", "0 0 1 1.57079632679", 32),
+            cyl(app("CHARCOAL_DARK"), 0.008, 0.002, f"{_r(-(HEAD_W/2 + 0.0052))} 0 0", "0 0 1 1.57079632679", 32),
         ]
     )
     # Mic dots sit on the crown and are the visible part of the touch sensor.
@@ -681,7 +714,7 @@ def robot_proto(base: Mesh, front: Mesh, back: Mesh, cap_f: Mesh, cap_b: Mesh, b
 
     # Webots cameras look along local +X. Rz(-90) aims +X out of the face (-Y).
     camera = """Camera {
-          translation 0 -0.0375 0.033
+          translation 0 -0.043 0.033
           rotation 0 0 1 -1.57079632679
           children [
             Pose {
@@ -836,7 +869,7 @@ PROTO GemaClockDock [
     rotation IS rotation
     name IS name
     children [
-      {emit_indexed("dock", "DEF DOCK_SHELL PBRAppearance { baseColor 0.007 0.007 0.008 roughness 0.62 metalness 0 }", body, 0.8)}
+      {emit_indexed("dock", "DEF DOCK_SHELL PBRAppearance { baseColor 0.18 0.18 0.19 roughness 0.6 metalness 0 }", body, 0.8)}
       {emit_indexed("clock", 'DEF CLOCK_MAT PBRAppearance { baseColor 0 0 0 roughness 0.2 metalness 0 emissiveIntensity 2.4 baseColorMap DEF CLOCK_TEX ImageTexture { url [ "textures/clock_1042.png" ] repeatS FALSE repeatT FALSE filtering 0 } emissiveColorMap USE CLOCK_TEX }', clock, 0.4)}
       Pose {{
         translation 0 { _r(-DOCK/2 - 0.0002) } 0.0018
@@ -1334,6 +1367,7 @@ def _mean_normal(mesh: Mesh):
 def main() -> None:
     clock_v0, clock_v1 = copy_textures()
     write_logo()
+    write_face()
     base = lathe(base_profile(), 72, interior=(0.0, 0.0, 0.035))
     front, back, cap_f, cap_b, seam = build_head_meshes()
     bezel = build_bezel()

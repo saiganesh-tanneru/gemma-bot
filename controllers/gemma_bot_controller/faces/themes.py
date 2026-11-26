@@ -4,10 +4,10 @@ SCREEN_THEMES = {
     "CYAN": {
         "name": "Electric Cyan",
         "bg_color": 0x000000,
-        "eye_color": 0x00F0FF,
-        "eye_dim": 0x007799,
-        "mouth_color": 0x00D0FF,
-        "sunglass_frame": 0x00F0FF,
+        "eye_color": 0x8EC9DB,
+        "eye_dim": 0x5A9AAB,
+        "mouth_color": 0x8EC9DB,
+        "sunglass_frame": 0x8EC9DB,
     },
     "GREEN": {
         "name": "Matrix Emerald",

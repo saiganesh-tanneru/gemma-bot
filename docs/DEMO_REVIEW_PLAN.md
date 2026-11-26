@@ -9,7 +9,7 @@ Open **`worlds/gemabot_review_plan.wbt`** in Webots R2025a.
 ## What you should see
 
 - Charcoal two-part head and tapered base, orange tilt-pivot discs, orange base button, and a **GEMA** mark on the base.
-- The face is the live 128×64 OLED drawn by the existing controller (cyan eyes on black, themes, blink, lip-sync). `protos/textures/face_happy.png` is only the texture Webots shows before the controller draws. `protos/textures/face_joy.png` is the alternate concept face; to use it as that initial texture, change the `face_happy.png` URL in `protos/GemaBotReview.proto`.
+- The face is the live 128×64 OLED: soft light-blue rounded eyes (`#8EC9DB`), a white highlight, and a small smile. A larger `protos/textures/face_screen.png` is the panel's starting texture.
 - The dock clock reads **10:42** (`protos/textures/clock_1042.png`).
 - A desk, laptop, cup, and plant. The camera looks at the robot from the front of the desk.
 
