@@ -168,32 +168,14 @@ class Mesh:
             uv_block = (
                 f"\n{indent}texCoord TextureCoordinate {{\n{indent}  point [\n{uvs}\n{indent}  ]\n{indent}}}"
             )
-        normals = self._smooth_normals()
-        normal_vs = "\n".join(indent + "  " + " ".join(_r(c) for c in n) for n in normals)
         return (
             f"IndexedFaceSet {{\n"
             f"{indent}coord Coordinate {{\n{indent}  point [\n{points}\n{indent}  ]\n{indent}}}"
-            f"\n{indent}normal Normal {{\n{indent}  vector [\n{normal_vs}\n{indent}  ]\n{indent}}}"
             f"{uv_block}\n"
             f"{indent}coordIndex [\n{faces}\n{indent}]\n"
-            f"{indent}normalIndex [\n{faces}\n{indent}]\n"
             f"{indent}creaseAngle { _r(crease) }\n"
             f"{indent}}}"
         )
-
-    def _smooth_normals(self):
-        acc = [[0.0, 0.0, 0.0] for _ in self.verts]
-        for a, b, c in self.tris:
-            n = _cross(_sub(self.verts[b], self.verts[a]), _sub(self.verts[c], self.verts[a]))
-            for i in (a, b, c):
-                acc[i][0] += n[0]
-                acc[i][1] += n[1]
-                acc[i][2] += n[2]
-        out = []
-        for v in acc:
-            n = _norm((v[0], v[1], v[2]))
-            out.append(n if _dot(n, n) > 0.5 else (0.0, -1.0, 0.0))
-        return out
 
 
 def shape(appearance: str, geometry: str, indent: str = "        ") -> str:
@@ -531,7 +513,7 @@ def write_logo() -> None:
     total = sum(widths) + tracking * (len(letters) - 1)
     x = (512 - total) / 2
     for ch, width in zip(letters, widths):
-        draw.text((x, 24), ch, font=font, fill=(0xD9, 0xD9, 0xD9, 255))
+        draw.text((x, 18), ch, font=font, fill=(0xE6, 0xE6, 0xE6, 255))
         x += width + tracking
     image.save(TEX_DIR / "logo_gema.png")
 
@@ -629,7 +611,7 @@ def robot_proto(base: Mesh, front: Mesh, back: Mesh, cap_f: Mesh, cap_b: Mesh, b
     taper = math.atan((BASE_R_BOT - BASE_R_TOP) / BASE_H)
     lz = 0.034
     ly = -(base_radius(lz) + 0.0006)
-    logo_w, logo_h = 0.038, 0.0072
+    logo_w, logo_h = 0.056, 0.014
     # Local quad in XZ, then the Pose below rotates it onto the wall.
     logo_block = (
         "Pose {\n"
@@ -667,15 +649,16 @@ def robot_proto(base: Mesh, front: Mesh, back: Mesh, cap_f: Mesh, cap_b: Mesh, b
     )
     head_bits = "\n".join(
         [
-            emit_indexed("head front", app("CHARCOAL"), front, 1.4),
-            emit_indexed("head back", app("CHARCOAL"), back, 1.4),
+            emit_indexed("head front", app("CHARCOAL"), front, 2.4),
+            emit_indexed("head back", app("CHARCOAL"), back, 2.4),
             emit_indexed("cap f", app("CHARCOAL_DARK"), cap_f, 0.4),
             emit_indexed("cap b", app("CHARCOAL_DARK"), cap_b, 0.4),
             emit_indexed("bezel", app("BEZEL"), bezel, 0.5),
-            cyl(app("ACCENT"), 0.018, 0.007, f"{_r(HEAD_W/2 + 0.0022)} 0 0", "0 0 1 1.57079632679", 48),
-            cyl(app("ACCENT"), 0.018, 0.007, f"{_r(-(HEAD_W/2 + 0.0022))} 0 0", "0 0 1 1.57079632679", 48),
-            cyl(app("CHARCOAL_DARK"), 0.008, 0.002, f"{_r(HEAD_W/2 + 0.0052)} 0 0", "0 0 1 1.57079632679", 32),
-            cyl(app("CHARCOAL_DARK"), 0.008, 0.002, f"{_r(-(HEAD_W/2 + 0.0052))} 0 0", "0 0 1 1.57079632679", 32),
+            # Side discs: axis along X, 5 mm thick, 36 mm diameter (45% of head height), 5 mm proud.
+            cyl(app("ACCENT"), 0.018, 0.005, f"{_r(HEAD_W/2 + 0.0025)} 0 0", "0 0 1 1.57079632679", 48),
+            cyl(app("ACCENT"), 0.018, 0.005, f"{_r(-(HEAD_W/2 + 0.0025))} 0 0", "0 0 1 1.57079632679", 48),
+            cyl(app("CHARCOAL_DARK"), 0.007, 0.0012, f"{_r(HEAD_W/2 + 0.0046)} 0 0", "0 0 1 1.57079632679", 32),
+            cyl(app("CHARCOAL_DARK"), 0.007, 0.0012, f"{_r(-(HEAD_W/2 + 0.0046))} 0 0", "0 0 1 1.57079632679", 32),
         ]
     )
     # Mic dots sit on the crown and are the visible part of the touch sensor.
