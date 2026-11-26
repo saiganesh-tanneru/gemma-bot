@@ -1,0 +1,391 @@
+#VRML_SIM R2025a utf8
+# GemaBot review-plan desk scene.
+# Robot: 190 mm stationary companion, 96 mm tapered base, 95x80x75 mm head,
+# 65x49 mm face, pan/tilt neck. Dock: 99x99x16 mm clock charger.
+# Controller, device names, and the Sarvam voice pipeline are unchanged.
+
+EXTERNPROTO "../protos/GemaBotReview.proto"
+EXTERNPROTO "../protos/GemaClockDock.proto"
+
+WorldInfo {
+  title "GemaBot Review Plan"
+  info [
+    "Review-plan concept: stationary GemaBot on a clock charging dock, WFH desk."
+    "Reuses gemma_bot_controller (head_yaw, head_pitch, oled_display, camera, head_touch)."
+    "Open this world in Webots R2025a. See docs/DEMO_REVIEW_PLAN.md."
+  ]
+  basicTimeStep 16
+  coordinateSystem "ENU"
+  FPS 60
+}
+Viewpoint {
+  fieldOfView 0.52
+  orientation 0.061059 -0.070477 -0.995643 4.851019
+  position 0.148 -0.971 1.052
+  near 0.02
+  far 30
+  exposure 1.0
+  followType "None"
+  description "Review-plan three-quarter"
+}
+Background {
+  skyColor [ 0.78 0.80 0.82 ]
+  luminosity 1.05
+}
+DirectionalLight {
+  direction 0.28 0.72 -0.55
+  intensity 1.15
+  color 1 0.97 0.93
+  ambientIntensity 0.35
+  castShadows TRUE
+}
+DirectionalLight {
+  direction -0.45 0.55 -0.25
+  intensity 0.45
+  color 0.86 0.90 1
+  ambientIntensity 0.2
+  castShadows FALSE
+}
+DirectionalLight {
+  direction -0.1 -0.8 -0.35
+  intensity 0.55
+  color 1 0.96 0.9
+  castShadows FALSE
+}
+PointLight {
+  location 0.05 -0.29 1.29
+  intensity 2.2
+  color 1 0.95 0.88
+  attenuation 0 0 0.8
+  radius 3
+  castShadows FALSE
+}
+
+Solid {
+  translation 0 0.15 -0.02
+  name "floor"
+  children [
+    Shape {
+      appearance PBRAppearance {
+        baseColor 0.70 0.64 0.56
+        roughness 0.78
+        metalness 0
+      }
+      geometry Box {
+        size 4.6 3.6 0.04
+      }
+    }
+  ]
+  boundingObject Box {
+    size 4.6 3.6 0.04
+  }
+}
+Solid {
+  translation 0.08 0.02 0.736
+  name "rug"
+  children [
+    Shape {
+      appearance PBRAppearance {
+        baseColor 0.55 0.57 0.58
+        roughness 0.9
+      }
+      geometry Box {
+        size 1.85 1.15 0.008
+      }
+    }
+  ]
+}
+Solid {
+  translation 0 1.20 1.15
+  name "wall back"
+  children [
+    Shape {
+      appearance PBRAppearance {
+        baseColor 0.86 0.84 0.80
+        roughness 0.85
+      }
+      geometry Box {
+        size 3.4 0.08 2.30
+      }
+    }
+    Pose {
+      translation -0.72 -0.045 0.28
+      children [
+        Shape {
+          appearance PBRAppearance {
+            baseColor 0.93 0.90 0.84
+            roughness 0.4
+            emissiveColor 1 0.90 0.72
+            emissiveIntensity 1.4
+          }
+          geometry Box {
+            size 0.78 0.02 0.62
+          }
+        }
+      ]
+    }
+  ]
+}
+Solid {
+  translation -1.55 0.15 1.15
+  name "wall left"
+  children [
+    Shape {
+      appearance PBRAppearance {
+        baseColor 0.84 0.82 0.78
+        roughness 0.85
+      }
+      geometry Box {
+        size 0.08 2.2 2.30
+      }
+    }
+  ]
+}
+
+Solid {
+  translation 0.06 0.04 0.726
+  name "desk"
+  children [
+    Shape {
+      appearance DEF WOOD PBRAppearance {
+        baseColor 0.46 0.32 0.22
+        roughness 0.52
+        metalness 0.02
+      }
+      geometry Box {
+        size 1.38 0.70 0.028
+      }
+    }
+    Pose {
+      translation -0.62 0.28 -0.370
+      children [
+        Shape {
+          appearance USE WOOD
+          geometry Box { size 0.045 0.045 0.712 }
+        }
+      ]
+    }
+    Pose {
+      translation 0.62 0.28 -0.370
+      children [
+        Shape {
+          appearance USE WOOD
+          geometry Box { size 0.045 0.045 0.712 }
+        }
+      ]
+    }
+    Pose {
+      translation -0.62 -0.28 -0.370
+      children [
+        Shape {
+          appearance USE WOOD
+          geometry Box { size 0.045 0.045 0.712 }
+        }
+      ]
+    }
+    Pose {
+      translation 0.62 -0.28 -0.370
+      children [
+        Shape {
+          appearance USE WOOD
+          geometry Box { size 0.045 0.045 0.712 }
+        }
+      ]
+    }
+  ]
+  boundingObject Box {
+    size 1.38 0.70 0.028
+  }
+}
+
+# Laptop, screen facing -Y (toward the person at the desk).
+Solid {
+  translation -0.02 -0.08 0.745
+  name "laptop"
+  children [
+    Shape {
+      appearance DEF ALUMINUM PBRAppearance {
+        baseColor 0.72 0.73 0.75
+        roughness 0.32
+        metalness 0.65
+      }
+      geometry Box {
+        size 0.305 0.214 0.010
+      }
+    }
+    Pose {
+      translation 0 0.012 0.0056
+      children [
+        Shape {
+          appearance PBRAppearance {
+            baseColor 0.16 0.16 0.17
+            roughness 0.55
+          }
+          geometry Box {
+            size 0.27 0.15 0.001
+          }
+        }
+      ]
+    }
+    Pose {
+      translation 0 -0.045 0.0056
+      children [
+        Shape {
+          appearance PBRAppearance {
+            baseColor 0.22 0.22 0.23
+            roughness 0.4
+          }
+          geometry Box {
+            size 0.09 0.055 0.001
+          }
+        }
+      ]
+    }
+    Pose {
+      translation 0 0.107 0.006
+      rotation 1 0 0 -0.42
+      children [
+        Pose {
+          translation 0 -0.003 0.098
+          children [
+            Shape {
+              appearance USE ALUMINUM
+              geometry Box {
+                size 0.305 0.005 0.196
+              }
+            }
+            Pose {
+              translation 0 -0.0028 0.004
+              children [
+                Shape {
+                  appearance PBRAppearance {
+                    baseColor 0.05 0.07 0.09
+                    roughness 0.2
+                    emissiveColor 0.25 0.40 0.55
+                    emissiveIntensity 0.35
+                  }
+                  geometry Box {
+                    size 0.278 0.001 0.168
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
+
+Solid {
+  translation 0.55 -0.18 0.772
+  name "cup"
+  children [
+    Pose {
+      rotation 1 0 0 1.57079632679
+      children [
+        Shape {
+          appearance PBRAppearance {
+            baseColor 0.90 0.88 0.84
+            roughness 0.4
+          }
+          geometry Cylinder {
+            height 0.064
+            radius 0.034
+            subdivision 40
+          }
+        }
+      ]
+    }
+    Pose {
+      translation 0 0 0.033
+      rotation 1 0 0 1.57079632679
+      children [
+        Shape {
+          appearance PBRAppearance {
+            baseColor 0.55 0.36 0.18
+            roughness 0.35
+          }
+          geometry Cylinder {
+            height 0.002
+            radius 0.026
+            subdivision 32
+          }
+        }
+      ]
+    }
+  ]
+}
+
+Solid {
+  translation -0.22 0.16 0.74
+  name "plant"
+  children [
+    Pose {
+      translation 0 0 0.022
+      rotation 1 0 0 1.57079632679
+      children [
+        Shape {
+          appearance PBRAppearance {
+            baseColor 0.42 0.28 0.18
+            roughness 0.6
+          }
+          geometry Cylinder {
+            height 0.044
+            radius 0.038
+            subdivision 32
+          }
+        }
+      ]
+    }
+    Pose {
+      translation 0 0 0.07
+      children [
+        Shape {
+          appearance DEF LEAF PBRAppearance {
+            baseColor 0.22 0.40 0.20
+            roughness 0.55
+          }
+          geometry Sphere {
+            radius 0.038
+            subdivision 3
+          }
+        }
+      ]
+    }
+    Pose {
+      translation 0.02 -0.01 0.105
+      children [
+        Shape {
+          appearance USE LEAF
+          geometry Sphere {
+            radius 0.028
+            subdivision 3
+          }
+        }
+      ]
+    }
+    Pose {
+      translation -0.018 0.012 0.098
+      children [
+        Shape {
+          appearance PBRAppearance {
+            baseColor 0.28 0.48 0.24
+            roughness 0.5
+          }
+          geometry Sphere {
+            radius 0.026
+            subdivision 3
+          }
+        }
+      ]
+    }
+  ]
+}
+
+GemaClockDock {
+  translation 0.3 0.06 0.74
+}
+GemaBotReview {
+  translation 0.3 0.06 0.753
+}
