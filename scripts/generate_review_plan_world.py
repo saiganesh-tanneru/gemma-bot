@@ -443,10 +443,87 @@ def emit_indexed(name_comment: str, appearance: str, mesh: Mesh, crease: float) 
     return shape(appearance, mesh.vrml(crease))
 
 
+def smooth_rounded_box(half, radius, n=12):
+    """Rounded box: one quad per flat face, a fillet only on edges and corners."""
+    hx, hy, hz = half
+    r = min(radius, hx - 1e-4, hy - 1e-4, hz - 1e-4)
+    inner = (hx - r, hy - r, hz - r)
+    mesh = Mesh()
+
+    def quad(p00, p10, p11, p01):
+        a, b = mesh.add(p00), mesh.add(p10)
+        c, d = mesh.add(p11), mesh.add(p01)
+        mesh.tri(a, b, c)
+        mesh.tri(a, c, d)
+
+    ix, iy, iz = inner
+    # Flat faces. The fillet owns everything outside ±inner.
+    quad((-ix, -hy, -iz), (ix, -hy, -iz), (ix, -hy, iz), (-ix, -hy, iz))
+    quad((ix, hy, -iz), (-ix, hy, -iz), (-ix, hy, iz), (ix, hy, iz))
+    quad((hx, -iy, -iz), (hx, iy, -iz), (hx, iy, iz), (hx, -iy, iz))
+    quad((-hx, iy, -iz), (-hx, -iy, -iz), (-hx, -iy, iz), (-hx, iy, iz))
+    quad((-ix, -iy, hz), (ix, -iy, hz), (ix, iy, hz), (-ix, iy, hz))
+    quad((-ix, iy, -hz), (ix, iy, -hz), (ix, -iy, -hz), (-ix, -iy, -hz))
+
+    def add_edge(free, sa, sb):
+        others = [i for i in (0, 1, 2) if i != free]
+        ia, ib = others
+
+        def point(t, s_free):
+            ang = (math.pi / 2.0) * t
+            p = [0.0, 0.0, 0.0]
+            p[free] = s_free * inner[free]
+            p[ia] = sa * inner[ia] + sa * r * math.cos(ang)
+            p[ib] = sb * inner[ib] + sb * r * math.sin(ang)
+            return tuple(p)
+
+        lo = [mesh.add(point(i / n, -1)) for i in range(n + 1)]
+        hi = [mesh.add(point(i / n, 1)) for i in range(n + 1)]
+        for i in range(n):
+            mesh.tri(lo[i], hi[i], lo[i + 1])
+            mesh.tri(lo[i + 1], hi[i], hi[i + 1])
+
+    for free in (0, 1, 2):
+        for sa in (-1, 1):
+            for sb in (-1, 1):
+                add_edge(free, sa, sb)
+
+    def corner_point(sx, sy, sz, phi, theta):
+        nx = math.cos(theta) * math.sin(phi)
+        ny = math.sin(theta) * math.sin(phi)
+        nz = math.cos(phi)
+        return (
+            sx * inner[0] + sx * r * nx,
+            sy * inner[1] + sy * r * ny,
+            sz * inner[2] + sz * r * nz,
+        )
+
+    for sx in (-1, 1):
+        for sy in (-1, 1):
+            for sz in (-1, 1):
+                ids = []
+                for i in range(n + 1):
+                    phi = (math.pi / 2) * i / n
+                    row = []
+                    for j in range(n + 1):
+                        theta = (math.pi / 2) * j / n
+                        row.append(mesh.add(corner_point(sx, sy, sz, phi, theta)))
+                    ids.append(row)
+                for i in range(n):
+                    for j in range(n):
+                        a, b = ids[i][j], ids[i][j + 1]
+                        c, d = ids[i + 1][j], ids[i + 1][j + 1]
+                        mesh.tri(a, c, b)
+                        mesh.tri(b, c, d)
+    mesh.weld(1e-5)
+    mesh.orient_outward((0.0, 0.0, 0.0))
+    return mesh
+
+
 def build_head_meshes():
     half = (HEAD_W / 2, HEAD_D / 2, HEAD_H / 2)
-    # High segment count plus smooth normals: a soft fillet without a faceted chamfer.
-    head = rounded_box(half, HEAD_BEVEL, 14)
+    # Flat faces, fillets only at the edges. No normal map.
+    head = smooth_rounded_box(half, HEAD_BEVEL, 16)
     seam = -HEAD_D / 2 + SEAM_FROM_FRONT
     front = clip_mesh(head, 1, seam, keep_below=True)
     back = clip_mesh(head, 1, seam + SEAM_GAP, keep_below=False)
@@ -649,16 +726,18 @@ def robot_proto(base: Mesh, front: Mesh, back: Mesh, cap_f: Mesh, cap_b: Mesh, b
     )
     head_bits = "\n".join(
         [
-            emit_indexed("head front", app("CHARCOAL"), front, 2.4),
-            emit_indexed("head back", app("CHARCOAL"), back, 2.4),
+            emit_indexed("head front", app("CHARCOAL"), front, 1.0),
+            emit_indexed("head back", app("CHARCOAL"), back, 1.0),
             emit_indexed("cap f", app("CHARCOAL_DARK"), cap_f, 0.4),
             emit_indexed("cap b", app("CHARCOAL_DARK"), cap_b, 0.4),
             emit_indexed("bezel", app("BEZEL"), bezel, 0.5),
             # Side discs: axis along X, 5 mm thick, 36 mm diameter (45% of head height), 5 mm proud.
-            cyl(app("ACCENT"), 0.018, 0.005, f"{_r(HEAD_W/2 + 0.0025)} 0 0", "0 0 1 1.57079632679", 48),
-            cyl(app("ACCENT"), 0.018, 0.005, f"{_r(-(HEAD_W/2 + 0.0025))} 0 0", "0 0 1 1.57079632679", 48),
-            cyl(app("CHARCOAL_DARK"), 0.007, 0.0012, f"{_r(HEAD_W/2 + 0.0046)} 0 0", "0 0 1 1.57079632679", 32),
-            cyl(app("CHARCOAL_DARK"), 0.007, 0.0012, f"{_r(-(HEAD_W/2 + 0.0046))} 0 0", "0 0 1 1.57079632679", 32),
+            # R2025a cylinders run along local Z. Ry(90) lays that axis along X,
+            # so the disc sits against the side face instead of lying flat.
+            cyl(app("ACCENT"), 0.018, 0.005, f"{_r(HEAD_W/2 + 0.0025)} 0 0", "0 1 0 1.57079632679", 48),
+            cyl(app("ACCENT"), 0.018, 0.005, f"{_r(-(HEAD_W/2 + 0.0025))} 0 0", "0 1 0 1.57079632679", 48),
+            cyl(app("CHARCOAL_DARK"), 0.007, 0.0012, f"{_r(HEAD_W/2 + 0.0046)} 0 0", "0 1 0 1.57079632679", 32),
+            cyl(app("CHARCOAL_DARK"), 0.007, 0.0012, f"{_r(-(HEAD_W/2 + 0.0046))} 0 0", "0 1 0 1.57079632679", 32),
         ]
     )
     # Mic dots sit on the crown and are the visible part of the touch sensor.
