@@ -14,7 +14,7 @@ PROTO GemaClockDock [
     name IS name
     children [
       Shape {
-        appearance DEF DOCK_SHELL PBRAppearance { baseColor 0.145 0.145 0.152 roughness 0.62 metalness 0.04 }
+        appearance DEF DOCK_SHELL PBRAppearance { baseColor 0.007 0.007 0.008 roughness 0.62 metalness 0 }
         geometry           IndexedFaceSet {
                   coord Coordinate {
                     point [

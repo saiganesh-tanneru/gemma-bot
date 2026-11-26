@@ -836,7 +836,7 @@ PROTO GemaClockDock [
     rotation IS rotation
     name IS name
     children [
-      {emit_indexed("dock", "DEF DOCK_SHELL PBRAppearance { baseColor 0.145 0.145 0.152 roughness 0.62 metalness 0.04 }", body, 0.8)}
+      {emit_indexed("dock", "DEF DOCK_SHELL PBRAppearance { baseColor 0.007 0.007 0.008 roughness 0.62 metalness 0 }", body, 0.8)}
       {emit_indexed("clock", 'DEF CLOCK_MAT PBRAppearance { baseColor 0 0 0 roughness 0.2 metalness 0 emissiveIntensity 2.4 baseColorMap DEF CLOCK_TEX ImageTexture { url [ "textures/clock_1042.png" ] repeatS FALSE repeatT FALSE filtering 0 } emissiveColorMap USE CLOCK_TEX }', clock, 0.4)}
       Pose {{
         translation 0 { _r(-DOCK/2 - 0.0002) } 0.0018
