@@ -10,7 +10,8 @@ Dimensions follow gemabot_scene.py (millimetres, Z up, face toward -Y):
   overall  190 mm from base bottom to head top
   dock     99 x 99 x 16 mm, robot sits 3 mm into the top pocket
 
-The controller is not touched. Device names match gemma_bot_controller:
+Phase 1 desk behavior (wake, dock clock, Pomodoro) lives in gemma_bot_controller.
+This script only builds geometry. Device names match gemma_bot_controller:
 oled_display, camera, head_yaw, head_pitch, yaw_sensor, pitch_sensor, head_touch.
 """
 
@@ -1005,7 +1006,7 @@ def world_file(robot_xy, dock_z_note=True) -> str:
 # GemaBot review-plan desk scene.
 # Robot: 190 mm stationary companion, 96 mm tapered base, 95x80x75 mm head,
 # 65x49 mm face, pan/tilt neck. Dock: 99x99x16 mm clock charger.
-# Controller, device names, and the Sarvam voice pipeline are unchanged.
+# Device names and the Sarvam voice pipeline are unchanged. Desk behavior is in the controller.
 
 EXTERNPROTO "../protos/GemaBotReview.proto"
 EXTERNPROTO "../protos/GemaClockDock.proto"

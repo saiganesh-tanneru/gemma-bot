@@ -2,7 +2,7 @@
 # GemaBot review-plan desk scene.
 # Robot: 190 mm stationary companion, 96 mm tapered base, 95x80x75 mm head,
 # 65x49 mm face, pan/tilt neck. Dock: 99x99x16 mm clock charger.
-# Controller, device names, and the Sarvam voice pipeline are unchanged.
+# Device names and the Sarvam voice pipeline are unchanged. Desk behavior is in the controller.
 
 EXTERNPROTO "../protos/GemaBotReview.proto"
 EXTERNPROTO "../protos/GemaClockDock.proto"

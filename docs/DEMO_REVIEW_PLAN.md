@@ -2,7 +2,7 @@
 
 Stationary desk companion from the review-plan concept renders: about 190 mm tall, 96 mm tapered base, 95×80×75 mm head, 65×49 mm (3.2 in) face, burnt-orange side discs, base light ring, and button, sitting on a 99×99×16 mm clock charging dock. The head still pans and tilts. There are no wheels or legs.
 
-This world reuses `controllers/gemma_bot_controller` unchanged, including the Sarvam voice pipeline. `worlds/gemma_bot.wbt` is not modified.
+This world uses `controllers/gemma_bot_controller`, including the unchanged Sarvam voice pipeline. `worlds/gemma_bot.wbt` is not modified.
 
 Open **`worlds/gemabot_review_plan.wbt`** in Webots R2025a.
 
@@ -13,7 +13,43 @@ Open **`worlds/gemabot_review_plan.wbt`** in Webots R2025a.
 - The dock clock reads **10:42** (`protos/textures/clock_1042.png`).
 - A desk, laptop, cup, and plant. The camera looks at the robot from the front of the desk.
 
-Keyboard and touch match the existing controller: `1`–`6` moods, arrow keys pan/tilt, space pets the head. The crown touch sensor is `head_touch`.
+Keyboard and touch match the existing controller: `1`–`6` moods, arrow keys pan/tilt, space pets the head. The crown touch sensor is `head_touch`. Hold **F** to press that crown in this scene (nothing collides with the bumper on its own).
+
+## Phase 1 desk features
+
+Three behaviors, all in the existing controller (`controllers/gemma_bot_controller/desk.py` plus the main loop). No new devices. The Sarvam STT, chat, and TTS request code is unchanged.
+
+### First-boot smile and greeting
+
+Press Play.
+
+- The face blinks, then returns to the current soft-blue (`#8EC9DB`) rounded eyes and smile.
+- The head nods once. Pitch stays inside the tilt stops, -0.52 to +0.42 rad.
+- The console prints `Hello, I'm Gema.`
+- If TTS can speak (`GEMMA_TTS_PROVIDER=sarvam` with `SARVAM_API_KEY`, or `mac_say`), that same sentence is passed to the existing `speak` path. With `null` TTS, or Sarvam and no key, it is printed and also drawn on the OLED.
+- The long wake is stored in `~/.gema/review_plan_has_booted` (`GEMA_BOOT_FLAG_PATH` overrides the path). The next Play is a shorter blink and nod, with no greeting. Delete the file to see the long wake again.
+
+### Desk clock on the dock
+
+The robot starts on the dock. After the wake, the OLED shows the local time as `HH:MM` in `#00F0FF`. The dock's printed 10:42 texture is left as it is.
+
+The face comes back for about 6 seconds when you tap the crown, tap **F**, or use a mood key, then the clock returns if the robot is still docked. Moving the robot off the dock (about 8 cm across the desk, or 4 cm up) also brings the face back.
+
+### Pomodoro and stretch
+
+Hold the crown or **F** for about 0.8 seconds. Focus runs 25 minutes, then a stretch prompt, then a 5-minute break, then focus again.
+
+- The OLED shows a bar, `MM:SS` left, and the minutes left.
+- When focus ends, the face goes happy, the head does a small wiggle, and the screen reads "Stand up and stretch!".
+- A short tap during a running block pauses it. Tap again to resume.
+- A long press during the session cancels it.
+
+A full cycle is long. Start Webots with the demo durations (60 seconds focus, 20 seconds break; the stretch prompt stays about 3 seconds):
+
+```bash
+export GEMA_POMODORO_DEMO=1
+webots worlds/gemabot_review_plan.wbt
+```
 
 ## Run it locally
 
@@ -88,7 +124,7 @@ Matched in `protos/GemaBotReview.proto`, not by editing the controller:
 | Display | `oled_display` | 128×64 |
 | Camera | `camera` | 160×120, looks out of the face |
 | Pan motor | `head_yaw` | about Z, ±1.4 rad |
-| Tilt motor | `head_pitch` | about X through the head centre, ±0.45 rad |
+| Tilt motor | `head_pitch` | about X through the head centre, -0.52 to +0.42 rad |
 | Sensors | `yaw_sensor`, `pitch_sensor` | present, as in the original world |
 | Touch | `head_touch` | bumper on the crown |
 
@@ -109,4 +145,4 @@ The robot’s Webots name stays `Gemma-Bot` so the existing controller, status s
 - The head bevel is a coarse chamfer (5 segments). A denser mesh flat-shaded into a chevron pattern in Webots, so the shell is faceted rather than the smooth Cycles bevel in the deck renders.
 - The tilt axis passes through the head centre (the orange discs), which is the concept. The original `gemma_bot.wbt` pitched at the top of the neck. Motor names, axes, signs, and limits are the same, so nod and pan commands move the same way.
 - The clock PNG was padded onto a 1024×512 sheet so Webots would not stretch the non-power-of-two source. The digits keep their aspect ratio. Webots still prints a warning that `face_happy.png` (1200×900) is not a power of two; that file is replaced as soon as the controller draws the OLED.
-- No controller, config default, or Sarvam client code was edited. `start_all.sh` still defaults to `worlds/gemma_bot.wbt`; set `GEMMA_WORLD_PATH` as above to launch this world.
+- Phase 1 adds the wake, dock clock, and Pomodoro in `controllers/gemma_bot_controller`. Config defaults and the Sarvam client code are unchanged. `start_all.sh` still defaults to `worlds/gemma_bot.wbt`; set `GEMMA_WORLD_PATH` as above to launch this world.

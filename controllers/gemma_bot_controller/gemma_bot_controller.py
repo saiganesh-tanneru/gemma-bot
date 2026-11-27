@@ -8,6 +8,7 @@ import logging
 import math
 import random
 import sys
+import time
 from pathlib import Path
 from typing import Optional
 
@@ -20,6 +21,34 @@ for _path in (_CONTROLLER_DIR, _REPO_ROOT):
         sys.path.insert(0, _path)
 
 import config
+from desk import (
+    DEMO_DOCK_XYZ,
+    FACE_HOLD_SECONDS,
+    GREETING_TEXT,
+    PHASE_BREAK,
+    PHASE_FOCUS,
+    PHASE_STRETCH,
+    STRETCH_TEXT,
+    Pomodoro,
+    WakePlan,
+    boot_flag_path,
+    clamp_pitch,
+    clamp_yaw,
+    crown_action,
+    display_mode,
+    draw_clock,
+    is_docked,
+    draw_greeting_caption,
+    draw_stretch_caption,
+    draw_timer,
+    long_press_ticks,
+    pomodoro_durations,
+    read_dock_translation,
+    read_has_booted,
+    read_robot_translation,
+    voice_can_speak,
+    write_has_booted,
+)
 from faces import (
     EMOJI_MOOD_MAP,
     SCREEN_THEMES,
@@ -122,6 +151,21 @@ class GemmaBotCompanion:
         self.gesture_frame = 0
         self.gesture_total_frames = 0
         self._was_touched = False
+        self._touch_hold_ticks = 0
+        self._long_press_fired = False
+
+        # Phase 1 desk: wake, dock clock, Pomodoro. Idle until run().
+        focus_s, break_s = pomodoro_durations()
+        self.pomodoro = Pomodoro(focus_s, break_s)
+        self.long_press_ticks = long_press_ticks(self.timestep)
+        self.sim_time = 0.0
+        self.docked = True
+        self._dock_xyz = None
+        self._wake: Optional[WakePlan] = None
+        self._wake_active = False
+        self._wake_blink_seen = False
+        self._greeting_caption = None
+        self._show_face_until = 0.0
 
         # Background HTTP AI command server
         self.server = start_command_server(config.BOT_PORT, config.BOT_HOST) if start_server else None
@@ -135,6 +179,7 @@ class GemmaBotCompanion:
         print("  [1] Neutral       [2] Happy        [3] Surprised")
         print("  [4] Sleepy        [5] Angry        [6] Thinking")
         print("  [SPACE] Pet Head  [Arrow Keys] Manual Pan/Tilt")
+        print("  [F] Crown tap (face / pause) or hold ~0.8s (Pomodoro)")
         print("=" * 65)
 
     def _sync_theme_fields(self) -> None:
@@ -362,6 +407,8 @@ class GemmaBotCompanion:
                 self.gaze_y = 0.0
 
         # 3. Autonomous Idle Life (when no gesture is active)
+        elif self._wake_active:
+            pass
         elif self.mood == "NEUTRAL":
             self.next_idle_action -= 1
             if self.next_idle_action <= 0:
@@ -411,29 +458,185 @@ class GemmaBotCompanion:
 
     def handle_keyboard_input(self) -> None:
         """Processes manual keyboard and rising-edge touch input."""
+        crown_key = False
         key = self.keyboard.getKey()
         while key > 0:
+            if (key & 0xFFFF) in (ord("F"), ord("f")):
+                crown_key = True
             action = self.keymap.get(key)
             if action is not None:
                 apply_key_action(self, action)
+                self._show_face_until = self.sim_time + FACE_HOLD_SECONDS
             key = self.keyboard.getKey()
 
-        is_touched = bool(self.touch and self.touch.getValue() > 0.5)
+        is_touched = crown_key or bool(self.touch and self.touch.getValue() > 0.5)
         if is_touched and not self._was_touched:
-            self.mood = "HAPPY"
-            self.idle_timer = 0
-            self.trigger_gesture("wiggle")
-            self.trigger_blink()
-            print("Head Touched! -> HAPPY")
+            self._touch_hold_ticks = 1
+            self._long_press_fired = False
+            self._show_face_until = self.sim_time + FACE_HOLD_SECONDS
+            if crown_action(active=self.pomodoro.active, paused=self.pomodoro.paused, event="rising") == "pet":
+                self.mood = "HAPPY"
+                self.idle_timer = 0
+                self.trigger_gesture("wiggle")
+                self.trigger_blink()
+                print("Head Touched! -> HAPPY")
+        elif is_touched:
+            self._touch_hold_ticks += 1
+        else:
+            if self._was_touched and not self._long_press_fired:
+                action = crown_action(active=self.pomodoro.active, paused=self.pomodoro.paused, event="release")
+                self._apply_crown_action(action)
+            self._touch_hold_ticks = 0
+
+        if is_touched and not self._long_press_fired and self._touch_hold_ticks >= self.long_press_ticks:
+            self._long_press_fired = True
+            action = crown_action(active=self.pomodoro.active, paused=self.pomodoro.paused, event="long")
+            self._apply_crown_action(action)
         self._was_touched = is_touched
+
+    def _apply_crown_action(self, action: str) -> None:
+        if action == "start":
+            self.pomodoro.start()
+            self.active_gesture = None
+            self.mood = "NEUTRAL"
+            self.target_yaw = 0.0
+            self.target_pitch = 0.0
+            kind = "60s/20s demo" if self.pomodoro.focus_s < 120 else "25/5"
+            print(f"Pomodoro started ({kind}). Short tap pauses. Long press cancels.")
+        elif action == "cancel":
+            self.pomodoro.cancel()
+            self.mood = "NEUTRAL"
+            self.active_gesture = None
+            self.target_yaw = 0.0
+            self.target_pitch = 0.0
+            print("Pomodoro cancelled.")
+        elif action == "pause":
+            self.pomodoro.pause()
+            print("Pomodoro paused.")
+        elif action == "resume":
+            self.pomodoro.resume()
+            print("Pomodoro resumed.")
+
+    def _begin_wake(self) -> None:
+        first = not read_has_booted(boot_flag_path())
+        self._wake = WakePlan(first_boot=first)
+        self._wake_active = True
+        self._wake_blink_seen = False
+        self._greeting_caption = None
+        print("Gema wake: first boot." if first else "Gema wake: short wake.")
+
+    def _deliver_greeting(self) -> None:
+        if voice_can_speak(self.tts_provider):
+            self.trigger_speech(GREETING_TEXT)
+            self._greeting_caption = None
+        else:
+            print(f"🗣️ Gemma-Bot: \"{GREETING_TEXT}\"")
+            self._greeting_caption = GREETING_TEXT
+        self._show_face_until = self.sim_time + 30.0
+
+    def _finish_wake(self) -> None:
+        first = bool(self._wake and self._wake.first_boot)
+        if first:
+            try:
+                write_has_booted(boot_flag_path())
+            except OSError as exc:
+                print(f"[Wake] Could not store the boot flag: {exc}")
+        hold = 4.0 if first else 1.5
+        if self.speech_timer > 0:
+            hold = max(hold, (self.speech_timer * self.timestep) / 1000.0 + 0.4)
+        self._show_face_until = self.sim_time + hold
+        self._wake = None
+        self._wake_active = False
+        self.is_blinking = False
+        self.blink_progress = 0.0
+        self.target_yaw = 0.0
+        self.target_pitch = 0.0
+
+    def _apply_wake(self) -> None:
+        if not self._wake_active or self._wake is None:
+            return
+        step = self._wake.advance()
+        if step is None:
+            self._finish_wake()
+            return
+        self.blink_progress = step.blink
+        self.is_blinking = step.blink > 0.2
+        # Smile once the lid is open again. Setting HAPPY while blink != 0
+        # snaps the eyes. The short wake uses this same path.
+        if step.blink > 0:
+            self._wake_blink_seen = True
+        elif self._wake_blink_seen:
+            self.mood = "HAPPY"
+        yaw = clamp_yaw(step.yaw)
+        pitch = clamp_pitch(step.pitch)
+        self.target_yaw = yaw
+        self.target_pitch = pitch
+        self.cur_yaw = yaw
+        self.cur_pitch = pitch
+        self.yaw_motor.setPosition(yaw)
+        self.pitch_motor.setPosition(pitch)
+        if step.greet:
+            self._deliver_greeting()
+        if step.done:
+            self._finish_wake()
+
+    def _refresh_docked(self) -> None:
+        if self._dock_xyz is None:
+            self._dock_xyz = read_dock_translation(self.robot) or DEMO_DOCK_XYZ
+        pos = read_robot_translation(self.robot)
+        if pos is None:
+            return
+        self.docked = is_docked(pos, self._dock_xyz)
+
+    def _on_pomodoro_phase(self, phase: Optional[str]) -> None:
+        if phase == PHASE_STRETCH:
+            self.mood = "HAPPY"
+            self.trigger_gesture("wiggle")
+            print(STRETCH_TEXT)
+        elif phase in (PHASE_BREAK, PHASE_FOCUS):
+            self.mood = "NEUTRAL"
+            self.active_gesture = None
+            self.target_yaw = 0.0
+            self.target_pitch = 0.0
+
+    def _render_screen(self) -> None:
+        mode = display_mode(
+            docked=self.docked,
+            waking=self._wake_active,
+            phase=self.pomodoro.phase,
+            face_hold=self.sim_time < self._show_face_until,
+        )
+        if mode == "clock":
+            self._greeting_caption = None
+            draw_clock(self.display, time.localtime())
+            return
+        if mode == "pomodoro":
+            self._greeting_caption = None
+            draw_timer(self.display, self.pomodoro)
+            return
+        if mode == "stretch":
+            self.mood = "HAPPY"
+            self.render_face()
+            draw_stretch_caption(self.display)
+            return
+        self.render_face()
+        if self._greeting_caption:
+            draw_greeting_caption(self.display, self._greeting_caption)
+            if self.sim_time >= self._show_face_until:
+                self._greeting_caption = None
 
     def run(self) -> None:
         """Main simulation execution loop."""
+        self._begin_wake()
         while self.robot.step(self.timestep) != -1:
+            self.sim_time += self.timestep / 1000.0
+            self._refresh_docked()
             self.handle_keyboard_input()
             self.process_ai_commands()
+            self._on_pomodoro_phase(self.pomodoro.tick(self.timestep / 1000.0))
             self.update_animation()
-            self.render_face()
+            self._apply_wake()
+            self._render_screen()
 
 
 if __name__ == "__main__":
