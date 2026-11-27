@@ -163,6 +163,7 @@ class GemmaBotCompanion:
         self._dock_xyz = None
         self._wake: Optional[WakePlan] = None
         self._wake_active = False
+        self._wake_blink_seen = False
         self._greeting_caption = None
         self._show_face_until = 0.0
 
@@ -520,6 +521,7 @@ class GemmaBotCompanion:
         first = not read_has_booted(boot_flag_path())
         self._wake = WakePlan(first_boot=first)
         self._wake_active = True
+        self._wake_blink_seen = False
         self._greeting_caption = None
         print("Gema wake: first boot." if first else "Gema wake: short wake.")
 
@@ -559,6 +561,12 @@ class GemmaBotCompanion:
             return
         self.blink_progress = step.blink
         self.is_blinking = step.blink > 0.2
+        # Smile once the lid is open again. Setting HAPPY while blink != 0
+        # snaps the eyes. The short wake uses this same path.
+        if step.blink > 0:
+            self._wake_blink_seen = True
+        elif self._wake_blink_seen:
+            self.mood = "HAPPY"
         yaw = clamp_yaw(step.yaw)
         pitch = clamp_pitch(step.pitch)
         self.target_yaw = yaw

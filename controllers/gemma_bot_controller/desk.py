@@ -17,7 +17,7 @@ PITCH_MIN = -0.52
 PITCH_MAX = 0.42
 YAW_LIMIT = 1.4
 
-SOFT_BLUE = 0x8EC9DB
+SOFT_BLUE = 0x00F0FF
 BAR_TRACK = 0x1A3338
 
 FOCUS_SECONDS = 25 * 60
@@ -430,12 +430,11 @@ def draw_greeting_caption(display, text: str) -> None:
     if display is None:
         return
     display.setColor(SOFT_BLUE)
+    # Happy eyes occupy about y=19..45. "I'm Gema." used to start at y=10 and
+    # crossed the left eye, so the second line sits below the face.
     if "," in text:
         head, tail = text.split(",", 1)
-        lines = [head.strip() + ",", tail.strip()]
+        display.drawText(head.strip() + ",", 4, 1)
+        display.drawText(tail.strip(), 4, 53)
     else:
-        lines = [text]
-    y = 1
-    for line in lines:
-        display.drawText(line, 4, y)
-        y += 9
+        display.drawText(text, 4, 53)

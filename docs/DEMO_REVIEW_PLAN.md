@@ -31,7 +31,7 @@ Press Play.
 
 ### Desk clock on the dock
 
-The robot starts on the dock. After the wake, the OLED shows the local time as `HH:MM` in `#8EC9DB`. The dock's printed 10:42 texture is left as it is.
+The robot starts on the dock. After the wake, the OLED shows the local time as `HH:MM` in `#00F0FF`. The dock's printed 10:42 texture is left as it is.
 
 The face comes back for about 6 seconds when you tap the crown, tap **F**, or use a mood key, then the clock returns if the robot is still docked. Moving the robot off the dock (about 8 cm across the desk, or 4 cm up) also brings the face back.
 

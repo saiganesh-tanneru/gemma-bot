@@ -225,6 +225,7 @@ def test_clock_and_pomodoro_screens_use_soft_blue():
     draw_clock(first, morning)
     draw_clock(second, later)
     assert first.ops != second.ops
+    assert SOFT_BLUE == 0x00F0FF
     assert any(op[0] == "rect" and op[5] == SOFT_BLUE for op in first.ops)
 
     session = Pomodoro(FOCUS_SECONDS, BREAK_SECONDS)
