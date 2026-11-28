@@ -728,6 +728,16 @@ class ChintuStateMachine:
                 if not self.is_speaking and self.now_s >= self._reaction_until_s:
                     self._pick_idle_gesture()
 
+            if self._reaction_shiver and self._reaction_kind == "shaken" and self.now_s < self._reaction_until_s:
+                rel_shake = self.now_s - self._reaction_started_s
+                if rel_shake < 1.10 and self.dock.is_docked():
+                    self.servos.snap_target_for_tick(
+                        12.0 * math.sin(rel_shake * 22.0),
+                        4.0 + 5.0 * math.cos(rel_shake * 26.0),
+                        self.now_s,
+                        wake_limits=True,
+                    )
+
             # Transition to DROWSY on Energy 0 or 30 min inactivity
             if self.meters.energy <= 0.0 or (self.now_s - self.last_interaction_s) >= INACTIVITY_DROWSY_S:
                 self.start_drowsy()

@@ -508,6 +508,38 @@ def test_playground_http_server_and_webots_controller_startup():
     assert bot.machine.state == ChintuState.IDLE_AWAKE
     assert bot.machine.wake_count == 1
     assert CHINTU_STATUS["product"] == "Chintu"
+    assert "alarm_remaining_s" in CHINTU_STATUS
+    assert "host_audio" in CHINTU_STATUS
+
+    # Webots parity: shake (X) drives physical servos, talk (T) drives talk_open, alarm (A), kick off (K)
+    CHINTU_COMMAND_QUEUE.put({"shake": True})
+    yaws = []
+    for _ in range(25):
+        bot.step_once()
+        yaws.append(bot.servo_rig.pan_deg)
+    assert max(abs(y) for y in yaws) > 2.0
+    for _ in range(int(4.6 / 0.02)):
+        bot.step_once()
+
+    CHINTU_COMMAND_QUEUE.put({"talk": "hello Chintu!"})
+    bot.step_once()
+    assert CHINTU_STATUS["frame"]["talk_open"] > 0.0
+    for _ in range(int(2.0 / 0.02)):
+        bot.step_once()
+
+    CHINTU_COMMAND_QUEUE.put({"alarm_in_s": 2.0})
+    bot.step_once()
+    assert CHINTU_STATUS["alarm_remaining_s"] == pytest.approx(2.0, abs=0.1)
+    for _ in range(int(2.2 / 0.02)):
+        bot.step_once()
+    assert CHINTU_STATUS["frame"]["bell_alpha"] == 1.0
+    for _ in range(int(4.2 / 0.02)):
+        bot.step_once()
+
+    CHINTU_COMMAND_QUEUE.put({"kicked_off_dock": True})
+    bot.step_once()
+    assert CHINTU_STATUS["is_docked"] is False
+    assert CHINTU_STATUS["frame"]["alert_alpha"] == 1.0
 
 
 def test_standalone_playground_runs_without_webots():
