@@ -155,6 +155,8 @@ class SarvamTTS(TTSProvider):
             data=json.dumps(payload).encode("utf-8"),
             headers={
                 "Content-Type": "application/json",
+                "Accept": "application/json",
+                "User-Agent": "Gemma-Bot/1.0",
                 "api-subscription-key": self.api_key,
             },
             method="POST",
@@ -169,6 +171,8 @@ class SarvamTTS(TTSProvider):
             wav_bytes = base64.b64decode(audios[0])
         except Exception as exc:
             logger.warning("SarvamTTS API request failed: %s", exc)
+            if play_audio and sys.platform == "darwin":
+                return MacSayTTS().speak(clean_text, play_audio=True)
             return TTSHandle(duration_seconds=None)
 
         duration = _wav_duration_seconds(wav_bytes)

@@ -15,3 +15,8 @@ voice_server/models/*.bin
 voice_server/models/*.json
 voice_client/node_modules/
 voice_client/dist/
+
+# Obsidian local workspace state
+.obsidian/workspace*.json
+.obsidian/cache
+

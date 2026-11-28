@@ -89,6 +89,17 @@ To launch **everything** from within `gemma-bot` (Webots simulation in real-time
 
 When running, just speak naturally into your microphone! Press **Ctrl+C** anytime to cleanly stop all services.
 
+### Review-plan concept world
+
+`worlds/gemabot_review_plan.wbt` is the stationary GemaBot from the review-plan renders (tapered base, chamfered head, orange accents, clock dock) on a desk. It uses this same controller and the Sarvam pipeline with no API changes. `worlds/gemma_bot.wbt` is unchanged.
+
+```bash
+git fetch origin demo/review-plan-world
+git checkout demo/review-plan-world
+```
+
+Open `worlds/gemabot_review_plan.wbt` in Webots R2025a and press Play. For `./start_all.sh`, set `SARVAM_API_KEY`, `WEBOTS_APP`, and `GEMMA_WORLD_PATH` to this world. Exact commands, including the voice server, are in [`docs/DEMO_REVIEW_PLAN.md`](docs/DEMO_REVIEW_PLAN.md).
+
 ---
 
 ## 🏗️ Architecture

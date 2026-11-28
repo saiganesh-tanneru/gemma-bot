@@ -7,5 +7,7 @@ centralWidgetVisible: 1
 orthographicViewHeight: 1
 textFiles: -1
 consoles: Console:All:All
+renderingDevicePerspectives: Chintu:camera;1;1;0;0
+renderingDevicePerspectives: Chintu:oled_display;1;0.62439;0;0.177374
 renderingDevicePerspectives: Gemma-Bot:camera;1;1;0;0.11545
-renderingDevicePerspectives: Gemma-Bot:oled_display;1;1;0;0
+renderingDevicePerspectives: Gemma-Bot:oled_display;1;0.431707;0;0.317487

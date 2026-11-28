@@ -1,0 +1,244 @@
+# -*- coding: utf-8 -*-
+"""FreeCAD Parametric Macro for Chintu (4 Core Parts + Color Linings + Live Params).
+
+How to use in FreeCAD:
+  1. Macro -> Macros... -> select this file -> Execute (or open cad/out/chintu_cad.FCStd).
+  2. Edit any value inside `Params` spreadsheet (e.g. TestPitchDeg=26, TestRollDeg=26,
+     TestPanDeg=80, or ExplodeHeadZ=22 to inspect the hidden pogo pins underneath the head).
+  3. Toggle visibility (Spacebar) on `_03_Head_Shell` to inspect the internal pogo pocket.
+"""
+
+import math
+import FreeCAD as App
+import Part
+
+DOC_NAME = "Chintu_BallSocket_CAD"
+
+
+def make_or_reset_doc():
+    if App.ActiveDocument and App.ActiveDocument.Name == DOC_NAME:
+        doc = App.ActiveDocument
+        for obj in list(doc.Objects):
+            doc.removeObject(obj.Name)
+    else:
+        doc = App.newDocument(DOC_NAME)
+    return doc
+
+
+def create_params_sheet(doc):
+    sheet = doc.addObject("Spreadsheet::Sheet", "Params")
+    sheet.set("A1", "Parameter")
+    sheet.set("B1", "Value")
+    sheet.set("C1", "Unit / Notes")
+    params = [
+        ("BaseBotDia", 86.0, "mm (estimate was 96mm)"),
+        ("BaseTopDia", 78.0, "mm"),
+        ("BaseHeight", 50.0, "mm (fits 2x MG90S + 608 bearing + speaker)"),
+        ("RingGrooveZ", 6.5, "mm (copper light ring height from desk)"),
+        ("NeckBotDia", 36.0, "mm"),
+        ("NeckHeight", 24.0, "mm (base top to ball center)"),
+        ("BallDia", 32.0, "mm (socket clearance +0.8mm)"),
+        ("HeadWidth", 68.0, "mm (fitted for 2.06in AMOLED; estimate 95mm)"),
+        ("HeadHeight", 58.0, "mm (estimate 80mm)"),
+        ("HeadDepth", 46.0, "mm (estimate 75mm)"),
+        ("HeadWall", 2.5, "mm shell wall"),
+        ("HeadFillet", 7.0, "mm outer corner radius"),
+        ("AmoledW", 47.2, "mm (2.06in 410x502 landscape module)"),
+        ("AmoledH", 39.2, "mm"),
+        ("PogoRingDia", 24.0, "mm (6-pin radial pogo crown tucked under head)"),
+        ("PogoRingH", 2.4, "mm base flange"),
+        ("PogoPinH", 1.8, "mm spring pin height above flange"),
+        ("MagnetDia", 12.2, "mm (N52 disc magnet)"),
+        ("HeadSeatOffset", 15.5, "mm above ball center (sits flush over ball, hides pogo)"),
+        ("TestPanDeg", 0.0, "deg (test +-80)"),
+        ("TestPitchDeg", 0.0, "deg (test +-26)"),
+        ("TestRollDeg", 0.0, "deg (test +-26)"),
+        ("ExplodeHeadZ", 0.0, "mm (set e.g. 22 to pop head off & view hidden pogo pins)"),
+    ]
+    for idx, (name, val, note) in enumerate(params, start=2):
+        sheet.set(f"A{idx}", name)
+        sheet.set(f"B{idx}", str(val))
+        sheet.set(f"C{idx}", note)
+        sheet.setAlias(f"B{idx}", name)
+    doc.recompute()
+    return sheet
+
+
+def _color(obj, rgb):
+    if App.GuiUp:
+        obj.ViewObject.ShapeColor = rgb
+
+
+def build_parts(doc, s):
+    base_r_bot = s.BaseBotDia / 2.0
+    base_r_top = s.BaseTopDia / 2.0
+    base_h = s.BaseHeight
+    neck_r_bot = s.NeckBotDia / 2.0
+    neck_h = s.NeckHeight
+    ball_r = s.BallDia / 2.0
+    ball_z = (base_h - 1.5) + neck_h
+
+    # Compute local radius of tapered base at light-ring Z
+    rz = s.RingGrooveZ
+    ring_h = 2.2
+    r_at_groove = base_r_bot - (base_r_bot - base_r_top) * (rz / base_h)
+
+    # 1. Base + Socket Collar (with copper-ring groove & shoulder button recess)
+    base_shape = Part.makeCone(base_r_bot, base_r_top, base_h)
+    cavity = Part.makeCone(base_r_bot - 4.0, base_r_top - 5.0, base_h - 6.0)
+    bearing_cut = Part.makeCylinder(11.1, 6.0, App.Vector(0, 0, base_h - 5.5))
+    wire_cut = Part.makeCylinder(5.0, base_h + 2.0)
+
+    groove_outer = Part.makeCylinder(r_at_groove + 1.0, ring_h, App.Vector(0, 0, rz))
+    groove_inner = Part.makeCylinder(r_at_groove - 1.5, ring_h, App.Vector(0, 0, rz))
+    groove_cut = groove_outer.cut(groove_inner)
+
+    btn_x = base_r_top * 0.62
+    btn_y = -base_r_top * 0.44
+    btn_cut = Part.makeCylinder(3.4, 2.5, App.Vector(btn_x, btn_y, base_h - 1.5))
+
+    base_solid = base_shape.cut(cavity).cut(bearing_cut).cut(wire_cut).cut(groove_cut).cut(btn_cut)
+    base_obj = doc.addObject("Part::Feature", "01_Base_And_Socket")
+    base_obj.Shape = base_solid
+    _color(base_obj, (0.20, 0.21, 0.24))
+
+    # Color Lining 1A: Copper-Orange Bottom Light Ring
+    light_ring = Part.makeCylinder(r_at_groove + 0.15, ring_h - 0.1, App.Vector(0, 0, rz + 0.05)).cut(
+        Part.makeCylinder(r_at_groove - 1.4, ring_h + 0.2, App.Vector(0, 0, rz - 0.05))
+    )
+    light_obj = doc.addObject("Part::Feature", "05a_Base_Light_Ring")
+    light_obj.Shape = light_ring
+    _color(light_obj, (0.93, 0.58, 0.37))
+
+    # Color Lining 1B: Burnt-Orange Shoulder Button
+    btn_solid = Part.makeCylinder(3.1, 1.8, App.Vector(btn_x, btn_y, base_h - 0.8))
+    btn_obj = doc.addObject("Part::Feature", "05b_Base_Button")
+    btn_obj.Shape = btn_solid
+    _color(btn_obj, (0.92, 0.47, 0.24))
+
+    # 2. Ball + Neck
+    cup_top_z = ball_z - 1.5
+    neck_cone = Part.makeCone(neck_r_bot, ball_r + 2.25, cup_top_z - (base_h - 1.5), App.Vector(0, 0, base_h - 1.5))
+    socket_cut = Part.makeSphere(ball_r + 0.4, App.Vector(0, 0, ball_z))
+    neck_solid = neck_cone.cut(socket_cut).cut(Part.makeCylinder(4.5, neck_h + 4.0, App.Vector(0, 0, base_h - 2.0)))
+
+    # Ball trimmed slightly below HeadSeatOffset so pogo ring seats inside head bay with 0 exposure
+    pogo_total_h = s.PogoRingH + s.PogoPinH
+    pogo_mount_z = ball_z + s.HeadSeatOffset - pogo_total_h
+    ball_sphere = Part.makeSphere(ball_r, App.Vector(0, 0, ball_z))
+    trim_box = Part.makeBox(
+        s.BallDia + 10, s.BallDia + 10, s.BallDia,
+        App.Vector(-(s.BallDia + 10) / 2, -(s.BallDia + 10) / 2, pogo_mount_z),
+    )
+    ball_solid = ball_sphere.cut(trim_box).cut(Part.makeCylinder(4.0, s.BallDia, App.Vector(0, 0, ball_z - ball_r)))
+
+    neck_obj = doc.addObject("Part::Feature", "02a_Neck_Cup")
+    neck_obj.Shape = neck_solid
+    _color(neck_obj, (0.24, 0.25, 0.28))
+
+    ball_obj = doc.addObject("Part::Feature", "02b_Gimbal_Ball")
+    ball_obj.Shape = ball_solid
+    _color(ball_obj, (0.08, 0.09, 0.10))
+
+    # 3. Head Shell (hollowed, AMOLED bezel, deep underside pogo bay so pins are fully hidden!)
+    head_bot_z = ball_z + s.HeadSeatOffset
+    hw, hd, hh, w = s.HeadWidth, s.HeadDepth, s.HeadHeight, s.HeadWall
+    ob = Part.makeBox(hw, hd, hh, App.Vector(-hw / 2, -hd / 2, head_bot_z))
+    ob = ob.makeFillet(s.HeadFillet, ob.Edges)
+    ib = Part.makeBox(hw - 2 * w, hd - 2 * w, hh - 2 * w, App.Vector(-(hw - 2 * w) / 2, -(hd - 2 * w) / 2, head_bot_z + w))
+    ib = ib.makeFillet(max(1.5, s.HeadFillet - w), ib.Edges)
+
+    amoled_z0 = head_bot_z + (hh - s.AmoledH) / 2.0
+    amoled_cut = Part.makeBox(s.AmoledW, 3.0, s.AmoledH, App.Vector(-s.AmoledW / 2, -hd / 2 - 0.5, amoled_z0))
+
+    # Deep underside pocket (PogoRingDia + 1.4mm clearance, full pogo_total_h + 0.3mm depth)
+    bay_depth = pogo_total_h + 0.4
+    bay_cut = Part.makeCylinder((s.PogoRingDia + 1.4) / 2.0, bay_depth, App.Vector(0, 0, head_bot_z - 0.1))
+    # Also create thick inner boss around bay so pocket stays sealed from main cavity
+    bay_boss = Part.makeCylinder((s.PogoRingDia + 5.0) / 2.0, bay_depth + 2.0, App.Vector(0, 0, head_bot_z + 0.5))
+
+    head_solid = ob.cut(ib).fuse(bay_boss).cut(amoled_cut).cut(bay_cut)
+    head_obj = doc.addObject("Part::Feature", "03_Head_Shell")
+    head_obj.Shape = head_solid
+    _color(head_obj, (0.22, 0.23, 0.26))
+
+    # Color Lining 3A: Dark Glossy 2.06" AMOLED Glass Panel
+    glass = Part.makeBox(
+        s.AmoledW - 0.6, 1.4, s.AmoledH - 0.6,
+        App.Vector(-(s.AmoledW - 0.6) / 2, -hd / 2 + 0.4, amoled_z0 + 0.3),
+    )
+    glass_obj = doc.addObject("Part::Feature", "05c_AMOLED_Screen")
+    glass_obj.Shape = glass
+    _color(glass_obj, (0.07, 0.09, 0.12))
+
+    # Color Lining 3B: Left & Right Burnt-Orange Side Accent Rings (with dark center pin)
+    head_mid_z = head_bot_z + hh / 2.0
+    disc_r = min(hh * 0.22, 13.0)
+    side_rings = []
+    center_dots = []
+    for sign in (-1.0, 1.0):
+        base_x = sign * (hw / 2.0)
+        normal = App.Vector(sign, 0, 0)
+        pos = App.Vector(base_x - sign * 0.3, 0, head_mid_z)
+        outer_d = Part.makeCylinder(disc_r, 2.4, pos, normal)
+        inner_hole = Part.makeCylinder(3.8, 3.0, App.Vector(base_x - sign * 0.5, 0, head_mid_z), normal)
+        side_rings.append(outer_d.cut(inner_hole))
+        center_dots.append(Part.makeCylinder(3.6, 2.1, pos, normal))
+
+    rings_obj = doc.addObject("Part::Feature", "05d_Side_Orange_Rings")
+    rings_obj.Shape = side_rings[0].fuse(side_rings[1])
+    _color(rings_obj, (0.92, 0.47, 0.24))
+
+    dots_obj = doc.addObject("Part::Feature", "05e_Side_Ring_Centers")
+    dots_obj.Shape = center_dots[0].fuse(center_dots[1])
+    _color(dots_obj, (0.10, 0.11, 0.12))
+
+    # 4. Pogo-Pin Ring + 6 Gold Pins + Magnet (sits completely tucked inside head bay when ExplodeHeadZ=0)
+    pogo_base = Part.makeCylinder(s.PogoRingDia / 2.0, s.PogoRingH, App.Vector(0, 0, pogo_mount_z))
+    mag_cut = Part.makeCylinder(s.MagnetDia / 2.0, s.PogoRingH + 0.5, App.Vector(0, 0, pogo_mount_z + 0.6))
+    pogo_parts = [pogo_base.cut(mag_cut)]
+    pin_z0 = pogo_mount_z + s.PogoRingH
+    for idx in range(6):
+        ang = math.radians(idx * 60.0)
+        px = (s.PogoRingDia * 0.36) * math.cos(ang)
+        py = (s.PogoRingDia * 0.36) * math.sin(ang)
+        pogo_parts.append(Part.makeCylinder(0.85, s.PogoPinH, App.Vector(px, py, pin_z0)))
+
+    pogo_solid = pogo_parts[0]
+    for part in pogo_parts[1:]:
+        pogo_solid = pogo_solid.fuse(part)
+
+    pogo_obj = doc.addObject("Part::Feature", "04_Pogo_And_Magnet_Ring")
+    pogo_obj.Shape = pogo_solid
+    _color(pogo_obj, (0.85, 0.68, 0.25))
+
+    mag_solid = Part.makeCylinder((s.MagnetDia - 0.3) / 2.0, 2.2, App.Vector(0, 0, pogo_mount_z + 0.6))
+    mag_obj = doc.addObject("Part::Feature", "04b_Center_Magnet")
+    mag_obj.Shape = mag_solid
+    _color(mag_obj, (0.75, 0.77, 0.80))
+
+    # Apply TestPanDeg / TestPitchDeg / TestRollDeg + optional ExplodeHeadZ
+    pivot = App.Vector(0, 0, ball_z)
+    rot = App.Rotation(s.TestPanDeg, s.TestRollDeg, s.TestPitchDeg)
+    for m_obj in (ball_obj, pogo_obj, mag_obj):
+        m_obj.Placement = App.Placement(App.Vector(0, 0, 0), rot, pivot)
+
+    explode_vec = rot.multVec(App.Vector(0, 0, s.ExplodeHeadZ))
+    for h_obj in (head_obj, glass_obj, rings_obj, dots_obj):
+        h_obj.Placement = App.Placement(explode_vec, rot, pivot)
+
+    doc.recompute()
+    if App.GuiUp:
+        import FreeCADGui as Gui
+        Gui.SendMsgToActiveView("ViewFit")
+
+
+def main():
+    doc = make_or_reset_doc()
+    sheet = create_params_sheet(doc)
+    build_parts(doc, sheet)
+    App.Console.PrintMessage("Chintu 4-part FreeCAD parametric CAD (with hidden pogo pocket & color linings) ready!\n")
+
+
+if __name__ == "__main__":
+    main()

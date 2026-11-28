@@ -20,6 +20,7 @@ for _path in (_CONTROLLER_DIR, _REPO_ROOT):
         sys.path.insert(0, _path)
 
 import config
+from emotion_engine import EmotionEngine, create_chirp_player
 from faces import (
     EMOJI_MOOD_MAP,
     SCREEN_THEMES,
@@ -91,25 +92,32 @@ class GemmaBotCompanion:
         self.target_yaw = 0.0
         self.target_pitch = 0.0
 
-        # OLED renderer
-        self.disp_w = 128
-        self.disp_h = 64
+        # OLED/AMOLED renderer (auto-detect PROTO Display dimensions when available)
+        if self.display and hasattr(self.display, "getWidth") and hasattr(self.display, "getHeight"):
+            w = int(self.display.getWidth())
+            h = int(self.display.getHeight())
+            self.disp_w = w if w > 0 else 128
+            self.disp_h = h if h > 0 else 64
+        else:
+            self.disp_w = 128
+            self.disp_h = 64
         target = WebotsDisplayTarget(self.display) if self.display else None
         self.renderer = FaceRenderer(target, theme="CYAN", disp_w=self.disp_w, disp_h=self.disp_h)
         self._sync_theme_fields()
 
-        # Dynamic eye state
+        # Dynamic eye & emotion engine state
         self.gaze_x = 0.0
         self.gaze_y = 0.0
-        self.blink_progress = 0.0
-        self.is_blinking = False
-        self.blink_speed = 0.18
-
-        # Behavior / mood state
-        self.mood = "NEUTRAL"
+        self.chirp_player = create_chirp_player()
+        self.emotion_engine = EmotionEngine(
+            initial_mood="NEUTRAL",
+            transition_ms=500.0,
+            autonomous=True,
+            autonomous_interval_ticks=600,
+            chirp_player=self.chirp_player,
+        )
         self.idle_timer = 0
         self.next_idle_action = 100
-        self.next_blink = 140
 
         # Speech state & TTS provider
         self.speech_text = ""
@@ -137,6 +145,42 @@ class GemmaBotCompanion:
         print("  [SPACE] Pet Head  [Arrow Keys] Manual Pan/Tilt")
         print("=" * 65)
 
+    @property
+    def mood(self) -> str:
+        return self.emotion_engine.current_mood
+
+    @mood.setter
+    def mood(self, value: str) -> None:
+        self.emotion_engine.set_emotion(value, instant=True, play_chirp=False)
+
+    @property
+    def blink_progress(self) -> float:
+        return self.emotion_engine.blink.blink_progress
+
+    @blink_progress.setter
+    def blink_progress(self, value: float) -> None:
+        self.emotion_engine.blink.blink_progress = float(value)
+
+    @property
+    def is_blinking(self) -> bool:
+        return self.emotion_engine.blink.is_blinking
+
+    @is_blinking.setter
+    def is_blinking(self, value: bool) -> None:
+        self.emotion_engine.blink.is_blinking = bool(value)
+
+    @property
+    def next_blink(self) -> int:
+        return self.emotion_engine.blink.next_blink
+
+    @next_blink.setter
+    def next_blink(self, value: int) -> None:
+        self.emotion_engine.blink.next_blink = int(value)
+
+    def set_mood(self, mood_name: str, instant: bool = False, play_chirp: bool = False) -> None:
+        """Transitions mood via the Emotion Engine (smooth 500 ms morph + optional chirp)."""
+        self.emotion_engine.set_emotion(mood_name, instant=instant, play_chirp=play_chirp)
+
     def _sync_theme_fields(self) -> None:
         self.current_theme = self.renderer.current_theme
         self.bg_color = self.renderer.bg_color
@@ -154,6 +198,9 @@ class GemmaBotCompanion:
             blink_progress=self.blink_progress,
             idle_timer=self.idle_timer,
             speech_timer=self.speech_timer,
+            left_eye=self.emotion_engine.current_left,
+            right_eye=self.emotion_engine.current_right,
+            is_transitioning=self.emotion_engine.is_transitioning,
         )
 
     def trigger_speech(self, text: str, play_audio: bool = True) -> None:
@@ -165,7 +212,11 @@ class GemmaBotCompanion:
             self.speech_handle.stop()
             self.speech_handle = None
 
-        handle = self.tts_provider.speak(self.speech_text, play_audio=play_audio)
+        handle = (
+            self.tts_provider.speak(self.speech_text, play_audio=True)
+            if play_audio
+            else TTSHandle(duration_seconds=None)
+        )
         self.speech_handle = handle
 
         if handle.duration_seconds is not None and handle.duration_seconds > 0:
@@ -187,9 +238,7 @@ class GemmaBotCompanion:
 
     def trigger_blink(self) -> None:
         """Initiates a blink sequence."""
-        if not self.is_blinking:
-            self.is_blinking = True
-            self.blink_progress = 0.0
+        self.emotion_engine.blink.trigger()
 
     def set_screen_theme(self, theme: str) -> None:
         """Sets the active OLED screen color theme."""
@@ -223,6 +272,23 @@ class GemmaBotCompanion:
         self.gesture_total_frames = GESTURES[canonical].frames
         return True
 
+    def _apply_emotion_reaction(self, reaction) -> None:
+        """Applies gaze, posture, gesture, and speech interrupt from an EmotionReaction."""
+        if reaction is None:
+            return
+        if reaction.interrupt_speech:
+            self.interrupt_speech()
+        if reaction.gaze_x is not None:
+            self.gaze_x = reaction.gaze_x
+        if reaction.gaze_y is not None:
+            self.gaze_y = reaction.gaze_y
+        if reaction.target_yaw is not None:
+            self.target_yaw = reaction.target_yaw
+        if reaction.target_pitch is not None:
+            self.target_pitch = reaction.target_pitch
+        if reaction.gesture is not None:
+            self.trigger_gesture(reaction.gesture)
+
     def process_ai_commands(self) -> None:
         """Drains the AI command queue and executes actions."""
         gaze_presets = {
@@ -238,32 +304,17 @@ class GemmaBotCompanion:
             try:
                 cmd = COMMAND_QUEUE.get_nowait()
                 if "state" in cmd:
-                    state = str(cmd["state"]).upper()
-                    if state == "LISTENING":
-                        self.gaze_x = 0.0
-                        self.gaze_y = 0.0
-                        self.target_yaw = 0.0
-                        self.target_pitch = -0.05
-                    elif state == "THINKING":
-                        self.mood = "THINKING"
-                        self.gaze_x = 0.5
-                        self.gaze_y = -0.6
-                        self.target_yaw = 0.2
-                        self.target_pitch = -0.15
-                    elif state == "SPEAKING":
-                        self.mood = "HAPPY"
-                        if not self.active_gesture:
-                            self.trigger_gesture("nod")
-                    elif state in ("INTERRUPTED", "CANCELLED"):
-                        self.interrupt_speech()
-                        self.mood = "SURPRISED"
+                    reaction = self.emotion_engine.handle_conversation_state(
+                        cmd["state"],
+                        has_active_gesture=bool(self.active_gesture),
+                    )
+                    self._apply_emotion_reaction(reaction)
 
                 if cmd.get("interrupt") or cmd.get("flush"):
                     self.interrupt_speech()
 
                 if "mood" in cmd:
-                    self.mood = resolve_mood(cmd["mood"])
-                    self.trigger_blink()
+                    self.set_mood(cmd["mood"], instant=False, play_chirp=True)
 
                 if "gaze" in cmd:
                     preset = gaze_presets.get(str(cmd["gaze"]).lower())
@@ -290,15 +341,14 @@ class GemmaBotCompanion:
                     g_name = str(cmd["gesture"]).lower().strip()
                     self.trigger_gesture(g_name)
                     if "mood" not in cmd and g_name in GESTURE_DEFAULT_MOOD:
-                        self.mood = GESTURE_DEFAULT_MOOD[g_name]
-                        self.trigger_blink()
+                        self.set_mood(GESTURE_DEFAULT_MOOD[g_name], instant=False, play_chirp=True)
 
                 if "speech" in cmd and cmd["speech"]:
                     text_str = str(cmd["speech"])
-                    for char, m in EMOJI_MOOD_MAP.items():
-                        if char in text_str and "mood" not in cmd:
-                            self.mood = m
-                            break
+                    if "mood" not in cmd:
+                        inferred = resolve_mood(text_str)
+                        if any(char in text_str for char in EMOJI_MOOD_MAP):
+                            self.set_mood(inferred, instant=False, play_chirp=False)
                     play_audio = bool(cmd.get("audio", True))
                     self.trigger_speech(text_str, play_audio=play_audio)
 
@@ -311,24 +361,12 @@ class GemmaBotCompanion:
                 print(f"[AI Command Error]: {e}")
 
     def update_animation(self) -> None:
-        """Updates head servo positions, gestures, blinks, and timers."""
+        """Updates head servo positions, gestures, blinks, and Emotion Engine timers."""
         self.idle_timer += 1
 
-        # 1. Blink cycle
-        if self.is_blinking:
-            self.blink_progress += self.blink_speed
-            if self.blink_progress >= 1.0:
-                self.blink_progress = 1.0
-                self.blink_speed = -0.22
-            elif self.blink_progress <= 0.0:
-                self.blink_progress = 0.0
-                self.is_blinking = False
-                self.blink_speed = 0.20
-
-        self.next_blink -= 1
-        if self.next_blink <= 0:
-            self.trigger_blink()
-            self.next_blink = random.randint(120, 260)
+        # 1. Emotion Engine eye morph transition & blink cycle
+        self.emotion_engine.step_transition(self.timestep)
+        self.emotion_engine.blink.step()
 
         if self.speech_timer > 0:
             self.speech_timer -= 1
@@ -361,35 +399,20 @@ class GemmaBotCompanion:
                 self.gaze_x = 0.0
                 self.gaze_y = 0.0
 
-        # 3. Autonomous Idle Life (when no gesture is active)
-        elif self.mood == "NEUTRAL":
-            self.next_idle_action -= 1
-            if self.next_idle_action <= 0:
-                choice = random.random()
-                if choice < 0.35:
-                    self.gaze_x = 0.0
-                    self.gaze_y = 0.0
-                    self.target_yaw = 0.0
-                    self.target_pitch = 0.0
-                elif choice < 0.65:
-                    self.gaze_x = -0.75
-                    self.gaze_y = random.uniform(-0.3, 0.3)
-                    self.target_yaw = random.uniform(0.2, 0.5)
-                    self.target_pitch = self.gaze_y * 0.2
-                else:
-                    self.gaze_x = 0.75
-                    self.gaze_y = random.uniform(-0.3, 0.3)
-                    self.target_yaw = random.uniform(-0.5, -0.2)
-                    self.target_pitch = self.gaze_y * 0.2
-                self.next_idle_action = random.randint(100, 240)
-        elif self.mood == "HAPPY":
-            self.target_yaw = math.sin(self.idle_timer * 0.2) * 0.15
-            self.target_pitch = -0.12
-        elif self.mood == "SLEEPY":
-            self.target_yaw = 0.0
-            self.target_pitch = 0.32
-            self.gaze_x = 0.0
-            self.gaze_y = 0.5
+        # 3. Autonomous Emotion Engine Idle Life (when no gesture is active)
+        else:
+            is_idle = self.speech_timer == 0
+            self.emotion_engine.step_autonomous(self.timestep, is_idle=is_idle)
+            self.target_yaw, self.target_pitch, self.gaze_x, self.gaze_y = (
+                self.emotion_engine.compute_idle_pose(
+                    idle_timer=self.idle_timer,
+                    cur_yaw=self.target_yaw,
+                    cur_pitch=self.target_pitch,
+                    cur_gaze_x=self.gaze_x,
+                    cur_gaze_y=self.gaze_y,
+                )
+            )
+            self.next_idle_action = self.emotion_engine.next_idle_action
 
         # 4. Smooth servo interpolation
         alpha = 0.22 if self.active_gesture else 0.12
@@ -420,10 +443,9 @@ class GemmaBotCompanion:
 
         is_touched = bool(self.touch and self.touch.getValue() > 0.5)
         if is_touched and not self._was_touched:
-            self.mood = "HAPPY"
             self.idle_timer = 0
-            self.trigger_gesture("wiggle")
-            self.trigger_blink()
+            reaction = self.emotion_engine.handle_touch(play_chirp=True)
+            self._apply_emotion_reaction(reaction)
             print("Head Touched! -> HAPPY")
         self._was_touched = is_touched
 
