@@ -1,16 +1,18 @@
 #!/usr/bin/env python3
-"""Generate the GemaBot review-plan Webots world and PROTOs.
+"""Generate the Chintu / GemaBot Webots world and PROTOs from the fitted CAD design.
 
-Dimensions follow gemabot_scene.py (millimetres, Z up, face toward -Y):
+Dimensions match cad/build_chintu_cad.py ("fitted" preset, mm -> m, Z up, face -Y):
 
-  base     tapered frustum, bottom diameter 96 mm, top diameter 84 mm, height 70 mm
-  neck     40 mm, pan axis on the base top
-  head     95 x 80 x 75 mm (W x H x D), 9 mm bevel, tilt axis through the head centre
-  screen   65 x 49 mm (3.2 in) in a 74 x 58 mm recess
-  overall  190 mm from base bottom to head top
-  dock     99 x 99 x 16 mm, robot sits 3 mm into the top pocket
+  base     tapered frustum, bottom Ø86 mm, top Ø78 mm, height 50 mm, LED groove z=6.5 mm
+  neck     tapered column (Ø36 mm -> Ø24 mm cup) + Ø32 mm gimbal ball (center z=72.5 mm)
+  pogo     Ø24 mm gold pogo crown tucked inside head underside bay (0 mm pad slip)
+  head     68 x 58 x 46 mm (W x H x D), 7 mm fillet, seated 15.5 mm above ball center
+  screen   2.06" 502x410 landscape AMOLED (47.2 x 39.2 mm) inside 50.4 x 42.4 mm bezel
+  crown    50 x 30 mm top solar cell acting as floating bumper for head_touch
+  overall  146.0 mm from base bottom to head top
+  dock     92 x 92 x 16 mm clock charger, base sits 3 mm into pocket
 
-The controller is not touched. Device names match gemma_bot_controller:
+Device names match gemma_bot_controller:
 oled_display, camera, head_yaw, head_pitch, yaw_sensor, pitch_sensor, head_touch.
 """
 
@@ -18,40 +20,70 @@ from __future__ import annotations
 
 import math
 import shutil
+import struct
+import zlib
 from pathlib import Path
 
-from PIL import Image, ImageDraw, ImageFont
+try:
+    from PIL import Image, ImageDraw, ImageFont
+except ImportError:
+    Image = ImageDraw = ImageFont = None
 
 ROOT = Path(__file__).resolve().parents[1]
 PROTO_DIR = ROOT / "protos"
 TEX_DIR = PROTO_DIR / "textures"
 WORLD_PATH = ROOT / "worlds" / "gemabot_review_plan.wbt"
 
-# Source textures shipped with the concept (copied next to the PROTOs).
+# Source textures shipped with the concept (copied next to the PROTOs if present).
 _UPLOADS = Path("/home/ubuntu/.cursor/projects/workspace/uploads")
 FACE_HAPPY_SRC = _UPLOADS / "face_happy_e555.png"
 FACE_JOY_SRC = _UPLOADS / "face_joy_71a0.png"
 CLOCK_SRC = _UPLOADS / "clock_1042_d25a.png"
 
-# Concept parameters, metres.
-BASE_H = 0.070
-BASE_R_BOT = 0.048
-BASE_R_TOP = 0.042
-NECK_H = 0.040
-NECK_R = 0.023
-HEAD_W = 0.104  # 30% wider than the 80 mm height
-HEAD_H = 0.080
-HEAD_D = 0.086
-HEAD_BEVEL = 0.016
-SCR_W = 0.078  # about 75% of the front face
-SCR_H = 0.060
-IMG_W = 0.078
-IMG_H = 0.060
-DOCK = 0.099
+# Fitted CAD parameters (from cad/build_chintu_cad.py PRESETS["fitted"]), metres.
+BASE_H = 0.050
+BASE_R_BOT = 0.043
+BASE_R_TOP = 0.039
+RING_GROOVE_Z = 0.0065
+NECK_BASE_Z = BASE_H - 0.0015  # 0.0485
+NECK_R_BOT = 0.018
+NECK_H = 0.024
+BALL_R = 0.016  # Ø32 mm gimbal ball centered at BASE_H - 0.0015 + NECK_H = 0.0725 m
+BALL_CENTER_Z = NECK_BASE_Z + NECK_H  # 0.0725
+HEAD_SEAT_ABOVE_BALL = 0.0155
+POGO_RING_R = 0.012
+POGO_RING_H = 0.0042
+
+HEAD_W = 0.068
+HEAD_H = 0.058
+HEAD_D = 0.046
+HEAD_BEVEL = 0.007
+HEAD_MASS_KG = 0.0906
+HEAD_CENTER_LOCAL_Z = HEAD_SEAT_ABOVE_BALL + HEAD_H / 2  # 0.0445 above ball center
+HEAD_CENTER_Z = BALL_CENTER_Z + HEAD_CENTER_LOCAL_Z  # 0.117; head top = 0.146 m
+OVERALL_HEIGHT_M = BALL_CENTER_Z + HEAD_SEAT_ABOVE_BALL + HEAD_H  # 0.1460
+
+# 2.06" 410x502 AMOLED mounted in landscape (47.2 x 39.2 mm active glass)
+IMG_W = 0.0472
+IMG_H = 0.0392
+SCR_W = 0.0504
+SCR_H = 0.0434
+SCR_Z_OFFSET = -0.0010  # Leaves room for top-bezel camera pinhole inside flat front face
+OLED_DISP_W = 502
+OLED_DISP_H = 410
+
+# Burnt-orange side ear rings (from cad/build_chintu_cad.py build_color_accents)
+EAR_R = min(HEAD_H * 0.22, 0.013)  # 0.01276 m
+EAR_THICK = 0.0024
+EAR_DOT_R = 0.0036
+
+# Top crown 50 x 30 mm monocrystalline solar panel / floating touch bumper
+SOLAR_W = 0.050
+SOLAR_D = 0.030
+SOLAR_H = 0.0014
+
+DOCK = 0.092
 DOCK_H = 0.016
-SEAM_FROM_FRONT = 0.013
-SEAM_GAP = 0.0008
-HEAD_CENTER_Z = BASE_H + NECK_H + HEAD_H / 2  # 0.150; top of head is 0.190
 
 DESK_TOP = 0.740
 
@@ -393,31 +425,22 @@ def base_profile() -> list[tuple[float, float]]:
     def lip(z, inset):
         return (z, max(0.004, base_radius(z) - inset))
 
-    zg = 0.010
+    zg = RING_GROOVE_Z + 0.0011
     rg = base_radius(zg)
-    zs = 0.060
-    rs = base_radius(zs)
     return [
-        lip(0.000, 0.0045),
-        lip(0.0016, 0.0016),
-        (0.0036, base_radius(0.0036)),
-        (0.0076, base_radius(0.0076)),
-        (0.0085, rg - 0.0005),
-        (0.0089, rg - 0.0018),
-        (0.0111, rg - 0.0018),
-        (0.0115, base_radius(0.0115) - 0.0005),
-        (0.0130, base_radius(0.0130)),
-        (0.0300, base_radius(0.0300)),
-        (0.0480, base_radius(0.0480)),
-        (0.0588, base_radius(0.0588)),
-        (0.0594, rs - 0.00035),
-        (0.0597, rs - 0.00105),
-        (0.0603, rs - 0.00105),
-        (0.0606, base_radius(0.0606) - 0.00035),
-        (0.0620, base_radius(0.0620)),
-        (0.0662, base_radius(0.0662)),
-        lip(0.0684, 0.0014),
-        lip(0.0700, 0.0040),
+        lip(0.000, 0.0025),
+        lip(0.0012, 0.0010),
+        (0.0028, base_radius(0.0028)),
+        (RING_GROOVE_Z - 0.0004, base_radius(RING_GROOVE_Z - 0.0004)),
+        (RING_GROOVE_Z, rg - 0.0005),
+        (RING_GROOVE_Z + 0.0003, rg - 0.0018),
+        (RING_GROOVE_Z + 0.0019, rg - 0.0018),
+        (RING_GROOVE_Z + 0.0022, base_radius(RING_GROOVE_Z + 0.0022) - 0.0005),
+        (RING_GROOVE_Z + 0.0032, base_radius(RING_GROOVE_Z + 0.0032)),
+        (0.0250, base_radius(0.0250)),
+        (BASE_H - 0.0025, base_radius(BASE_H - 0.0025)),
+        lip(BASE_H - 0.0012, 0.0010),
+        lip(BASE_H, 0.0025),
     ]
 
 
@@ -520,26 +543,54 @@ def smooth_rounded_box(half, radius, n=12):
     return mesh
 
 
-def build_head_meshes():
+def build_head_mesh() -> Mesh:
+    """Single seamless charcoal head shell matching cad/build_chintu_cad.py 03_head_shell."""
     half = (HEAD_W / 2, HEAD_D / 2, HEAD_H / 2)
-    # Flat faces, fillets only at the edges. No normal map.
-    head = smooth_rounded_box(half, HEAD_BEVEL, 16)
-    seam = -HEAD_D / 2 + SEAM_FROM_FRONT
-    front = clip_mesh(head, 1, seam, keep_below=True)
-    back = clip_mesh(head, 1, seam + SEAM_GAP, keep_below=False)
-    # Dark caps close each shell so the 0.8 mm gap reads as a seam.
-    cap_front = rounded_rect(HEAD_W - 0.0012, HEAD_H - 0.0012, HEAD_BEVEL, seam, facing=+1, segments=6)
-    cap_back = rounded_rect(HEAD_W - 0.0012, HEAD_H - 0.0012, HEAD_BEVEL, seam + SEAM_GAP, facing=-1, segments=6)
-    return front, back, cap_front, cap_back, seam
+    return smooth_rounded_box(half, HEAD_BEVEL, 16)
 
 
 def build_screen() -> Mesh:
-    # Glossy panel just in front of the shell, inside the bezel lip.
-    return rounded_rect(IMG_W - 0.006, IMG_H - 0.006, 0.012, -HEAD_D / 2 - 0.0014, facing=-1, segments=10)
+    # Glossy AMOLED glass panel flush inside the front bezel.
+    m = rounded_rect(IMG_W - 0.0006, IMG_H - 0.0006, 0.005, -HEAD_D / 2 - 0.0011, facing=-1, segments=10)
+    m.verts = [(x, y, z + SCR_Z_OFFSET) for (x, y, z) in m.verts]
+    return m
 
 
 def build_bezel() -> Mesh:
-    return rounded_rect(SCR_W, SCR_H, 0.014, -HEAD_D / 2 - 0.0006, facing=-1, segments=10)
+    m = rounded_rect(SCR_W, SCR_H, 0.006, -HEAD_D / 2 - 0.0005, facing=-1, segments=10)
+    m.verts = [(x, y, z + SCR_Z_OFFSET * 0.4) for (x, y, z) in m.verts]
+    return m
+
+
+def build_curved_logo_mesh(z_center: float = 0.024, height: float = 0.0095, arc_deg: float = 42.0, segs: int = 16) -> Mesh:
+    """Curved conical decal hugging the front (-Y) tapered base wall with zero floating edges."""
+    mesh = Mesh()
+    mesh.uvs = []
+    z0 = z_center - height / 2.0
+    z1 = z_center + height / 2.0
+    r0 = base_radius(z0) + 0.0004
+    r1 = base_radius(z1) + 0.0004
+    half_rad = math.radians(arc_deg / 2.0)
+
+    for i in range(segs + 1):
+        u = i / segs
+        # Sweep from left (-X, angle=-half_rad from -Y) to right (+X, angle=+half_rad from -Y)
+        ang = -half_rad + 2.0 * half_rad * u
+        sx = math.sin(ang)
+        cy = -math.cos(ang)
+        mesh.add((r0 * sx, r0 * cy, z0))
+        mesh.uvs.append((u, 0.0))
+        mesh.add((r1 * sx, r1 * cy, z1))
+        mesh.uvs.append((u, 1.0))
+
+    for i in range(segs):
+        a = 2 * i
+        b = a + 1
+        c = a + 2
+        d = a + 3
+        mesh.tri(a, c, d)
+        mesh.tri(a, d, b)
+    return mesh
 
 
 def build_dock_mesh() -> Mesh:
@@ -579,24 +630,125 @@ def mat(name: str, **fields) -> str:
     return "\n".join(lines)
 
 
+def _dist_seg(px: float, py: float, x0: float, y0: float, x1: float, y1: float) -> float:
+    vx, vy = x1 - x0, y1 - y0
+    wx, wy = px - x0, py - y0
+    denom = vx * vx + vy * vy
+    t = 0.0 if denom < 1e-12 else max(0.0, min(1.0, (wx * vx + wy * vy) / denom))
+    dx = px - (x0 + t * vx)
+    dy = py - (y0 + t * vy)
+    return math.hypot(dx, dy)
+
+
+def _dist_arc(px: float, py: float, cx: float, cy: float, r: float, a0: float, a1: float) -> float:
+    ang = math.atan2(py - cy, px - cx)
+    if ang < 0.0:
+        ang += 2.0 * math.pi
+    if a0 <= ang <= a1:
+        return abs(math.hypot(px - cx, py - cy) - r)
+    p0 = (cx + r * math.cos(a0), cy + r * math.sin(a0))
+    p1 = (cx + r * math.cos(a1), cy + r * math.sin(a1))
+    return min(math.hypot(px - p0[0], py - p0[1]), math.hypot(px - p1[0], py - p1[1]))
+
+
+def _write_rgba_png(path: Path, w: int, h: int, rows: list[bytes]) -> None:
+    def chunk(tag: bytes, data: bytes) -> bytes:
+        crc = zlib.crc32(tag + data) & 0xFFFFFFFF
+        return struct.pack(">I", len(data)) + tag + data + struct.pack(">I", crc)
+
+    raw = b"".join(b"\x00" + r for r in rows)
+    ihdr = struct.pack(">IIBBBBB", w, h, 8, 6, 0, 0, 0)
+    png = b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", ihdr) + chunk(b"IDAT", zlib.compress(raw, 6)) + chunk(b"IEND", b"")
+    path.write_bytes(png)
+
+
 def write_logo() -> None:
+    """Renders crisp anti-aliased 'CHINTU' RGBA logo PNG using pure Python (no Pillow required)."""
     TEX_DIR.mkdir(parents=True, exist_ok=True)
-    image = Image.new("RGBA", (512, 128), (0, 0, 0, 0))
-    draw = ImageDraw.Draw(image)
-    font = ImageFont.truetype("/usr/share/fonts/truetype/macos/Inter-SemiBold.ttf", 72)
-    letters = list("GEMA")
-    widths = [draw.textlength(ch, font=font) for ch in letters]
-    tracking = 14
-    total = sum(widths) + tracking * (len(letters) - 1)
-    x = (512 - total) / 2
-    for ch, width in zip(letters, widths):
-        draw.text((x, 18), ch, font=font, fill=(0xE6, 0xE6, 0xE6, 255))
-        x += width + tracking
-    image.save(TEX_DIR / "logo_gema.png")
+    logo_path = TEX_DIR / "logo_chintu.png"
+    w, h = 512, 128
+    glyph_w = 56.0
+    glyph_h = 84.0
+    gap = 18.0
+    # Per-glyph (advance_scale, segments, arcs) in normalized [0..1]x[0..1]
+    c_arc_pts = [
+        (
+            0.55 + 0.42 * math.cos(a),
+            0.50 + 0.42 * math.sin(a),
+        )
+        for a in [
+            0.22 * math.pi + (1.56 * math.pi) * k / 16
+            for k in range(17)
+        ]
+    ]
+    c_segs = [(c_arc_pts[k][0], c_arc_pts[k][1], c_arc_pts[k + 1][0], c_arc_pts[k + 1][1]) for k in range(16)]
+    u_arc_pts = [
+        (
+            0.50 + 0.34 * math.cos(a),
+            0.58 + 0.34 * math.sin(a),
+        )
+        for a in [math.pi * k / 12 for k in range(13)]
+    ]
+    u_segs = [(0.16, 0.08, 0.16, 0.58), (0.84, 0.58, 0.84, 0.08)] + [
+        (u_arc_pts[k][0], u_arc_pts[k][1], u_arc_pts[k + 1][0], u_arc_pts[k + 1][1]) for k in range(12)
+    ]
+    glyphs = {
+        "C": (0.96, c_segs, []),
+        "H": (1.0, [(0.16, 0.08, 0.16, 0.92), (0.84, 0.08, 0.84, 0.92), (0.16, 0.50, 0.84, 0.50)], []),
+        "I": (0.42, [(0.50, 0.08, 0.50, 0.92)], []),
+        "N": (1.0, [(0.16, 0.92, 0.16, 0.08), (0.16, 0.08, 0.84, 0.92), (0.84, 0.92, 0.84, 0.08)], []),
+        "T": (0.96, [(0.06, 0.08, 0.94, 0.08), (0.50, 0.08, 0.50, 0.92)], []),
+        "U": (1.0, u_segs, []),
+    }
+    word = "CHINTU"
+    total_w = sum(glyph_w * glyphs[ch][0] for ch in word) + gap * (len(word) - 1)
+    boxes = []
+    cur_x = (w - total_w) / 2.0
+    y0 = (h - glyph_h) / 2.0
+    for ch in word:
+        scale, segs, arcs = glyphs[ch]
+        gw = glyph_w * scale
+        boxes.append((cur_x, gw, y0, glyph_h, segs, arcs))
+        cur_x += gw + gap
+
+    stroke_r = 5.4
+    aa = 1.6
+    rows: list[bytes] = []
+    for py in range(h):
+        row = bytearray(w * 4)
+        for px in range(w):
+            best = 1e9
+            for bx, bw, by, bh, segs, arcs in boxes:
+                if px < bx - stroke_r - 4 or px > bx + bw + stroke_r + 4 or py < by - stroke_r - 4 or py > by + bh + stroke_r + 4:
+                    continue
+                for x0, ya, x1, yb in segs:
+                    d = _dist_seg(px, py, bx + x0 * bw, by + ya * bh, bx + x1 * bw, by + yb * bh)
+                    if d < best:
+                        best = d
+                for cx, cy, rad, a0, a1 in arcs:
+                    # Keep uniform pixel radius using gw~glyph_h
+                    r_px = rad * min(bw, bh)
+                    d = _dist_arc(px, py, bx + cx * bw, by + cy * bh, r_px, a0, a1)
+                    if d < best:
+                        best = d
+            if best < stroke_r + aa:
+                alpha = int(max(0.0, min(1.0, (stroke_r + aa - best) / (2.0 * aa))) * 255)
+                idx = px * 4
+                row[idx] = 0xEE
+                row[idx + 1] = 0xEE
+                row[idx + 2] = 0xF2
+                row[idx + 3] = alpha
+        rows.append(bytes(row))
+    _write_rgba_png(logo_path, w, h, rows)
 
 
 def write_face() -> None:
     """Soft light-blue face, drawn large and scaled so the panel is not a pixel grid."""
+    face_path = TEX_DIR / "face_screen.png"
+    if Image is None:
+        if face_path.is_file():
+            return
+        raise RuntimeError("Pillow is required to generate missing face_screen.png")
     w, h = 1024, 788
     image = Image.new("RGB", (w, h), (6, 7, 10))
     draw = ImageDraw.Draw(image)
@@ -607,43 +759,50 @@ def write_face() -> None:
         draw.rounded_rectangle(box, radius=140, fill=eye)
         draw.ellipse([cx - ew // 2 + 48, 210, cx - ew // 2 + 128, 290], fill=(255, 255, 255))
     draw.arc([w // 2 - 110, 560, w // 2 + 110, 700], start=15, end=165, fill=eye, width=18)
-    image.save(TEX_DIR / "face_screen.png")
+    image.save(face_path)
 
 
 def copy_textures() -> tuple[float, float]:
-    """Copy face art as-is. Pad the clock onto a 1024x512 sheet so Webots does not
-    stretch the non-power-of-two source. Returns the V range of the digits."""
+    """Copy face art when source uploads exist; otherwise reuse pre-generated textures."""
     TEX_DIR.mkdir(parents=True, exist_ok=True)
-    shutil.copyfile(FACE_HAPPY_SRC, TEX_DIR / "face_happy.png")
-    shutil.copyfile(FACE_JOY_SRC, TEX_DIR / "face_joy.png")
-    src = Image.open(CLOCK_SRC).convert("RGBA")
-    canvas_w, canvas_h = 1024, 512
-    scaled_h = max(1, round(src.height * canvas_w / src.width))
-    scaled = src.resize((canvas_w, scaled_h), Image.Resampling.LANCZOS)
-    canvas = Image.new("RGBA", (canvas_w, canvas_h), (0, 0, 0, 255))
-    top = (canvas_h - scaled_h) // 2
-    canvas.paste(scaled, (0, top))
-    canvas.save(TEX_DIR / "clock_1042.png")
-    # OpenGL / Webots v=0 is the bottom of the image.
-    v0 = (canvas_h - (top + scaled_h)) / canvas_h
-    v1 = (canvas_h - top) / canvas_h
-    return v0, v1
+    if FACE_HAPPY_SRC.is_file():
+        shutil.copyfile(FACE_HAPPY_SRC, TEX_DIR / "face_happy.png")
+    if FACE_JOY_SRC.is_file():
+        shutil.copyfile(FACE_JOY_SRC, TEX_DIR / "face_joy.png")
+    if CLOCK_SRC.is_file() and Image is not None:
+        src = Image.open(CLOCK_SRC).convert("RGBA")
+        canvas_w, canvas_h = 1024, 512
+        scaled_h = max(1, round(src.height * canvas_w / src.width))
+        scaled = src.resize((canvas_w, scaled_h), Image.Resampling.LANCZOS)
+        canvas = Image.new("RGBA", (canvas_w, canvas_h), (0, 0, 0, 255))
+        top = (canvas_h - scaled_h) // 2
+        canvas.paste(scaled, (0, top))
+        canvas.save(TEX_DIR / "clock_1042.png")
+        v0 = (canvas_h - (top + scaled_h)) / canvas_h
+        v1 = (canvas_h - top) / canvas_h
+        return v0, v1
+    # Pre-padded 1024x512 clock_1042.png V bounds (rows 112..399 of 512)
+    return 113.0 / 512.0, 400.0 / 512.0
 
 
-def robot_proto(base: Mesh, front: Mesh, back: Mesh, cap_f: Mesh, cap_b: Mesh, bezel: Mesh, screen: Mesh) -> str:
+def robot_proto(base: Mesh, head_shell: Mesh, logo_mesh: Mesh, bezel: Mesh, screen: Mesh) -> str:
     # PBRAppearance is not a legal Robot child, so each material is DEF'd on first use.
     defined: set[str] = set()
     material_body = {
-        "CHARCOAL": "baseColor 0.18 0.18 0.19 roughness 0.6 metalness 0",
-        "CHARCOAL_DARK": "baseColor 0.10 0.10 0.11 roughness 0.55 metalness 0",
-        "GRAPHITE": "baseColor 0.01 0.01 0.011 roughness 0.28 metalness 0.4",
-        "ACCENT": "baseColor 0.941 0.541 0.294 roughness 0.42 metalness 0",
-        "LED": "baseColor 0.95 0.55 0.35 roughness 0.4 emissiveColor 1 0.55 0.35 emissiveIntensity 2.2",
+        "CHARCOAL": "baseColor 0.20 0.21 0.24 roughness 0.58 metalness 0",
+        "HEAD_CHARCOAL": "baseColor 0.22 0.23 0.26 roughness 0.55 metalness 0",
+        "NECK_CHARCOAL": "baseColor 0.24 0.25 0.28 roughness 0.55 metalness 0",
+        "EAR_CENTER": "baseColor 0.10 0.11 0.12 roughness 0.45 metalness 0.05",
+        "GRAPHITE": "baseColor 0.08 0.09 0.10 roughness 0.28 metalness 0.35",
+        "ACCENT": "baseColor 0.92 0.47 0.24 roughness 0.40 metalness 0",
+        "GOLD": "baseColor 0.85 0.68 0.25 roughness 0.25 metalness 0.85",
+        "SOLAR_CELL": "baseColor 0.035 0.055 0.135 roughness 0.14 metalness 0.35",
+        "LED": "baseColor 0.93 0.58 0.37 roughness 0.38 emissiveColor 0.93 0.58 0.37 emissiveIntensity 1.4",
         "MIC": "baseColor 0.02 0.02 0.022 roughness 0.45 metalness 0.1",
-        "BEZEL": "baseColor 0.012 0.012 0.014 roughness 0.25 metalness 0.05",
+        "BEZEL": "baseColor 0.012 0.012 0.014 roughness 0.22 metalness 0.05",
         "LOGO_MAT": (
             'baseColor 1 1 1 roughness 0.45 metalness 0 baseColorMap ImageTexture { '
-            'url [ "textures/logo_gema.png" ] repeatS FALSE repeatT FALSE }'
+            'url [ "textures/logo_chintu.png" ] repeatS FALSE repeatT FALSE }'
         ),
         "SCREEN_MAT": (
             "baseColor 0.02 0.02 0.025 roughness 0.08 metalness 0.12 emissiveIntensity 0.55 "
@@ -676,77 +835,65 @@ def robot_proto(base: Mesh, front: Mesh, back: Mesh, cap_f: Mesh, cap_b: Mesh, b
             "        }"
         )
 
-    led_r = base_radius(0.010) - 0.00055
-    seam_r = base_radius(0.060) - 0.00045
+    led_r = base_radius(RING_GROOVE_Z + 0.0011) - 0.0005
+    btn_x = (BASE_R_TOP * 2) * 0.32
+    btn_y = -(BASE_R_TOP * 2) * 0.24
     parts = [
         emit_indexed("base", app("CHARCOAL"), base, 0.7),
-        cyl(app("LED"), led_r, 0.00215, "0 0 0.010", "1 0 0 1.57079632679", 64),
-        cyl(app("CHARCOAL_DARK"), seam_r, 0.0007, "0 0 0.060", "1 0 0 1.57079632679", 64),
-        cyl(app("ACCENT"), 0.0032, 0.0022, "0.014 -0.026 0.0702", "1 0 0 1.57079632679", 24),
+        cyl(app("LED"), led_r, 0.0020, f"0 0 {_r(RING_GROOVE_Z + 0.0011)}", "1 0 0 1.57079632679", 64),
+        cyl(app("ACCENT"), 0.0031, 0.0018, f"{_r(btn_x)} {_r(btn_y)} {_r(BASE_H + 0.0002)}", "1 0 0 1.57079632679", 24),
+        emit_indexed("chintu logo", app("LOGO_MAT"), logo_mesh, 0.6),
     ]
-    # Quad on the tapered front wall. Tilt matches atan((r_bot-r_top)/h).
-    taper = math.atan((BASE_R_BOT - BASE_R_TOP) / BASE_H)
-    lz = 0.034
-    ly = -(base_radius(lz) + 0.0006)
-    logo_w, logo_h = 0.056, 0.014
-    # Local quad in XZ, then the Pose below rotates it onto the wall.
-    logo_block = (
-        "Pose {\n"
-        f"          translation 0.016 { _r(ly) } 0.026\n"
-        f"          rotation 1 0 0 { _r(taper) }\n"
-        "          children [\n"
-        "            Shape {\n"
-        f"              appearance {app('LOGO_MAT')}\n"
-        "              geometry IndexedFaceSet {\n"
-        "                coord Coordinate {\n"
-        "                  point [\n"
-        f"                    { _r(-logo_w/2) } 0 { _r(-logo_h/2) }\n"
-        f"                    { _r(logo_w/2) } 0 { _r(-logo_h/2) }\n"
-        f"                    { _r(logo_w/2) } 0 { _r(logo_h/2) }\n"
-        f"                    { _r(-logo_w/2) } 0 { _r(logo_h/2) }\n"
-        "                  ]\n"
-        "                }\n"
-        "                texCoord TextureCoordinate {\n"
-        "                  point [ 0 0, 1 0, 1 1, 0 1 ]\n"
-        "                }\n"
-        "                coordIndex [ 0 1 2 -1, 0 2 3 -1 ]\n"
-        "                texCoordIndex [ 0 1 2 -1, 0 2 3 -1 ]\n"
-        "              }\n"
-        "            }\n"
-        "          ]\n"
-        "        }"
-    )
-    parts.append(logo_block)
 
+    # Tapered neck socket column + Ø32 mm gimbal ball centered at z_local = NECK_H (0.024 m)
+    neck_cup = lathe(
+        [
+            (0.0, NECK_R_BOT),
+            (NECK_H - 0.001, BALL_R + 0.00225),
+        ],
+        48,
+        interior=(0.0, 0.0, NECK_H * 0.5),
+    )
     neck_visuals = "\n".join(
         [
-            cyl(app("GRAPHITE"), NECK_R + 0.006, 0.004, "0 0 0.002", "1 0 0 1.57079632679", 48),
-            cyl(app("GRAPHITE"), NECK_R, 0.022, "0 0 0.011", "1 0 0 1.57079632679", 48),
+            cyl(app("NECK_CHARCOAL"), NECK_R_BOT + 0.0015, 0.0025, "0 0 0.00125", "1 0 0 1.57079632679", 48),
+            emit_indexed("neck pedestal", app("NECK_CHARCOAL"), neck_cup, 0.7),
+            f"""Pose {{
+          translation 0 0 {_r(NECK_H)}
+          children [
+            Shape {{
+              appearance {app("GRAPHITE")}
+              geometry Sphere {{
+                radius {_r(BALL_R)}
+                subdivision 3
+              }}
+            }}
+          ]
+        }}""",
         ]
     )
+
     head_bits = "\n".join(
         [
-            emit_indexed("head front", app("CHARCOAL"), front, 1.0),
-            emit_indexed("head back", app("CHARCOAL"), back, 1.0),
-            emit_indexed("cap f", app("CHARCOAL_DARK"), cap_f, 0.4),
-            emit_indexed("cap b", app("CHARCOAL_DARK"), cap_b, 0.4),
+            emit_indexed("head shell", app("HEAD_CHARCOAL"), head_shell, 1.0),
             emit_indexed("bezel", app("BEZEL"), bezel, 0.5),
-            # Side discs: axis along X, 5 mm thick, 36 mm diameter (45% of head height), 5 mm proud.
-            # R2025a cylinders run along local Z. Ry(90) lays that axis along X,
-            # so the disc sits against the side face instead of lying flat.
-            cyl(app("ACCENT"), 0.018, 0.005, f"{_r(HEAD_W/2 + 0.0025)} 0 0", "0 1 0 1.57079632679", 48),
-            cyl(app("ACCENT"), 0.018, 0.005, f"{_r(-(HEAD_W/2 + 0.0025))} 0 0", "0 1 0 1.57079632679", 48),
-            cyl(app("CHARCOAL_DARK"), 0.007, 0.0012, f"{_r(HEAD_W/2 + 0.0046)} 0 0", "0 1 0 1.57079632679", 32),
-            cyl(app("CHARCOAL_DARK"), 0.007, 0.0012, f"{_r(-(HEAD_W/2 + 0.0046))} 0 0", "0 1 0 1.57079632679", 32),
+            # Burnt-orange side ear rings + dark center dots matching build_color_accents()
+            cyl(app("ACCENT"), EAR_R, EAR_THICK, f"{_r(HEAD_W/2 + EAR_THICK/2 - 0.0003)} 0 0", "0 1 0 1.57079632679", 48),
+            cyl(app("ACCENT"), EAR_R, EAR_THICK, f"{_r(-(HEAD_W/2 + EAR_THICK/2 - 0.0003))} 0 0", "0 1 0 1.57079632679", 48),
+            cyl(app("EAR_CENTER"), EAR_DOT_R, EAR_THICK + 0.0003, f"{_r(HEAD_W/2 + EAR_THICK/2 - 0.0001)} 0 0", "0 1 0 1.57079632679", 32),
+            cyl(app("EAR_CENTER"), EAR_DOT_R, EAR_THICK + 0.0003, f"{_r(-(HEAD_W/2 + EAR_THICK/2 - 0.0001))} 0 0", "0 1 0 1.57079632679", 32),
         ]
     )
-    # Mic dots sit on the crown and are the visible part of the touch sensor.
-    mics = []
-    for mx in (-0.006, 0.0, 0.006):
-        mics.append(
-            cyl(app("MIC"), 0.00115, 0.0014, f"{_r(mx)} 0 0", "1 0 0 1.57079632679", 16)
-        )
-    mic_block = "\n".join(mics)
+
+    # Gold pogo-pin crown collar seated between ball top and head underside bay
+    pogo_collar = cyl(
+        app("GOLD"),
+        POGO_RING_R,
+        POGO_RING_H,
+        f"0 0 {_r(HEAD_SEAT_ABOVE_BALL - POGO_RING_H / 2)}",
+        "1 0 0 1.57079632679",
+        36,
+    )
 
     screen_geom = screen.vrml(0.4, indent="              ")
     display = f"""DEF OLED_DISPLAY Display {{
@@ -758,60 +905,84 @@ def robot_proto(base: Mesh, front: Mesh, back: Mesh, cap_f: Mesh, cap_b: Mesh, b
             }}
           ]
           name "oled_display"
-          width 128
-          height 64
+          width {OLED_DISP_W}
+          height {OLED_DISP_H}
+        }}"""
+
+    # Top crown 50x30 mm solar panel acting as floating bumper for head_touch
+    solar_crown = f"""Pose {{
+          translation 0 0 0
+          children [
+            Shape {{
+              appearance USE BEZEL
+              geometry Box {{
+                size {_r(SOLAR_W + 0.002)} {_r(SOLAR_D + 0.002)} {_r(SOLAR_H)}
+              }}
+            }}
+            Pose {{
+              translation 0 0 0.0002
+              children [
+                Shape {{
+                  appearance {app("SOLAR_CELL")}
+                  geometry Box {{
+                    size {_r(SOLAR_W)} {_r(SOLAR_D)} {_r(SOLAR_H)}
+                  }}
+                }}
+              ]
+            }}
+          ]
         }}"""
 
     touch = f"""TouchSensor {{
-          translation 0 0.008 { _r(HEAD_H/2 + 0.0004) }
+          translation 0 0 { _r(HEAD_H/2 + SOLAR_H / 2) }
           name "head_touch"
           type "bumper"
           children [
-            {mic_block}
+            {solar_crown}
           ]
-          boundingObject Sphere {{
-            radius 0.014
+          boundingObject Box {{
+            size {_r(SOLAR_W + 0.002)} {_r(SOLAR_D + 0.002)} {_r(SOLAR_H + 0.002)}
           }}
         }}"""
 
-    # Webots cameras look along local +X. Rz(-90) aims +X out of the face (-Y).
-    camera = """Camera {
-          translation 0 -0.043 0.033
+    # Camera pinhole tucked cleanly inside top bezel strip above the AMOLED glass
+    camera = f"""Camera {{
+          translation 0 {_r(-HEAD_D/2 - 0.0005)} {_r(IMG_H/2 + SCR_Z_OFFSET + 0.0014)}
           rotation 0 0 1 -1.57079632679
           children [
-            Pose {
-              translation -0.0012 0 0
+            Pose {{
+              translation -0.0008 0 0
               rotation 0 0 1 1.57079632679
               children [
-                Shape {
-                  appearance USE MIC
-                  geometry Cylinder {
-                    height 0.002
-                    radius 0.0022
+                Shape {{
+                  appearance {app("MIC")}
+                  geometry Cylinder {{
+                    height 0.0014
+                    radius 0.0015
                     subdivision 20
-                  }
-                }
+                  }}
+                }}
               ]
-            }
+            }}
           ]
           name "camera"
           fieldOfView 1.40
           near 0.05
           width 160
           height 120
-        }"""
+        }}"""
 
-    head_z = NECK_H + HEAD_H / 2
     return f"""#VRML_SIM R2025a utf8
-# GemaBot review-plan body. Stationary (no wheels). Pan joint is head_yaw about Z,
-# tilt joint is head_pitch about X through the head centre. Device names match
-# controllers/gemma_bot_controller/gemma_bot_controller.py.
+# Chintu fitted-CAD body (146 mm tall, Ø86 mm base, Ø32 mm ball socket,
+# 68x58x46 mm seamless head, 2.06" 502x410 AMOLED, 50x30 mm solar crown bumper).
+# Pan joint is head_yaw about Z (±80 deg); tilt joint is head_pitch about X through
+# the gimbal ball center (±26 deg). Device names match gemma_bot_controller.py.
 
 PROTO GemaBotReview [
   field SFVec3f    translation  0 0 0
   field SFRotation rotation     0 0 1 0
-  field SFString   name         "Gemma-Bot"
-  field SFString   controller   "gemma_bot_controller"
+  field SFString   name         "Chintu"
+  field SFString   controller   "chintu_controller"
   field SFBool     supervisor   TRUE
 ]
 {{
@@ -826,7 +997,7 @@ PROTO GemaBotReview [
       HingeJoint {{
         jointParameters HingeJointParameters {{
           axis 0 0 1
-          anchor 0 0 { _r(BASE_H) }
+          anchor 0 0 { _r(NECK_BASE_Z) }
           minStop -1.4
           maxStop 1.4
         }}
@@ -842,16 +1013,16 @@ PROTO GemaBotReview [
           }}
         ]
         endPoint Solid {{
-          translation 0 0 { _r(BASE_H) }
+          translation 0 0 { _r(NECK_BASE_Z) }
           name "neck"
           children [
             {neck_visuals}
             HingeJoint {{
               jointParameters HingeJointParameters {{
                 axis 1 0 0
-                anchor 0 0 { _r(head_z) }
-                minStop -0.52
-                maxStop 0.42
+                anchor 0 0 { _r(NECK_H) }
+                minStop -0.454
+                maxStop 0.454
               }}
               device [
                 RotationalMotor {{
@@ -865,48 +1036,59 @@ PROTO GemaBotReview [
                 }}
               ]
               endPoint Solid {{
-                translation 0 0 { _r(head_z) }
+                translation 0 0 { _r(NECK_H) }
                 name "head"
                 children [
-                  {head_bits}
-                  {display}
-                  {touch}
-                  {camera}
+                  {pogo_collar}
+                  Pose {{
+                    translation 0 0 { _r(HEAD_CENTER_LOCAL_Z) }
+                    children [
+                      {head_bits}
+                      {display}
+                      {touch}
+                      {camera}
+                    ]
+                  }}
                 ]
-                boundingObject Box {{
-                  size 0.108 0.078 0.084
+                boundingObject Pose {{
+                  translation 0 0 { _r(HEAD_CENTER_LOCAL_Z) }
+                  children [
+                    Box {{
+                      size { _r(HEAD_W) } { _r(HEAD_D) } { _r(HEAD_H) }
+                    }}
+                  ]
                 }}
                 physics Physics {{
                   density -1
-                  mass 0.15
+                  mass { _r(HEAD_MASS_KG) }
                 }}
               }}
             }}
           ]
           boundingObject Pose {{
-            translation 0 0 0.011
+            translation 0 0 { _r(NECK_H / 2) }
             rotation 1 0 0 1.57079632679
             children [
               Cylinder {{
-                height 0.022
-                radius 0.024
+                height { _r(NECK_H) }
+                radius { _r(NECK_R_BOT) }
               }}
             ]
           }}
           physics Physics {{
             density -1
-            mass 0.05
+            mass 0.04
           }}
         }}
       }}
     ]
     boundingObject Pose {{
-      translation 0 0 0.034
+      translation 0 0 { _r(BASE_H / 2) }
       rotation 1 0 0 1.57079632679
       children [
         Cylinder {{
-          height 0.068
-          radius 0.048
+          height { _r(BASE_H) }
+          radius { _r(BASE_R_BOT) }
         }}
       ]
     }}
@@ -988,11 +1170,10 @@ def look_at(eye, target, up=(0.0, 0.0, 1.0)):
     return (axis[0], axis[1], axis[2], angle)
 
 
-def world_file(robot_xy, dock_z_note=True) -> str:
+def world_file(robot_xy, dock_z_note=False) -> str:
     rx, ry = robot_xy
-    robot_z = DESK_TOP + (DOCK_H - 0.003)
+    robot_z = DESK_TOP
     # Orientation taken from worlds/gemma_bot.wbt (it frames an upright Z-up robot).
-    # Position is in front of this robot's head so the dock clock and desk stay in frame.
     ox, oy, oz, oa = (
         0.061059499569659864,
         -0.07047738381890405,
@@ -1002,16 +1183,15 @@ def world_file(robot_xy, dock_z_note=True) -> str:
     eye = (0.148, -0.971, 1.052)
     # Laptop hinge leans the lid back toward +Y so the panel faces the viewer.
     return f"""#VRML_SIM R2025a utf8
-# GemaBot review-plan desk scene.
-# Robot: 190 mm stationary companion, 96 mm tapered base, 95x80x75 mm head,
-# 65x49 mm face, pan/tilt neck. Dock: 99x99x16 mm clock charger.
+# Chintu fitted-CAD desk scene.
+# Robot: 146 mm stationary companion, Ø86 mm tapered base, Ø32 mm ball socket,
+# 68x58x46 mm seamless head, 47.2x39.2 mm (502x410) AMOLED, 50x30 mm solar crown bumper.
 # Controller, device names, and the Sarvam voice pipeline are unchanged.
 
 EXTERNPROTO "../protos/GemaBotReview.proto"
-EXTERNPROTO "../protos/GemaClockDock.proto"
 
 WorldInfo {{
-  title "GemaBot Review Plan"
+  title "Chintu Desktop Companion"
   info [
     "Review-plan concept: stationary GemaBot on a clock charging dock, WFH desk."
     "Reuses gemma_bot_controller (head_yaw, head_pitch, oled_display, camera, head_touch)."
@@ -1386,9 +1566,6 @@ Solid {{
   ]
 }}
 
-GemaClockDock {{
-  translation { _r(rx) } { _r(ry) } { _r(DESK_TOP) }
-}}
 GemaBotReview {{
   translation { _r(rx) } { _r(ry) } { _r(robot_z) }
 }}
@@ -1412,7 +1589,7 @@ def check_vrml(path: Path) -> None:
         raise SystemExit(f"{path} unbalanced braces ({depth})")
     if "PROTO" in path.name or path.suffix == ".proto":
         return
-    for token in ("GemaBotReview", "GemaClockDock", "Viewpoint", "WorldInfo"):
+    for token in ("GemaBotReview", "Viewpoint", "WorldInfo"):
         if token not in text:
             raise SystemExit(f"{path} missing {token}")
 
@@ -1430,24 +1607,25 @@ def main() -> None:
     clock_v0, clock_v1 = copy_textures()
     write_logo()
     write_face()
-    base = lathe(base_profile(), 72, interior=(0.0, 0.0, 0.035))
-    front, back, cap_f, cap_b, seam = build_head_meshes()
+    base = lathe(base_profile(), 72, interior=(0.0, 0.0, 0.025))
+    head_shell = build_head_mesh()
+    logo_mesh = build_curved_logo_mesh()
     bezel = build_bezel()
     screen = build_screen()
     dock = build_dock_mesh()
     clock = build_clock(clock_v0, clock_v1)
 
-    # Dimension guards so a mesh change cannot silently leave the concept.
+    # Dimension guards so a mesh change cannot silently leave the fitted CAD spec.
     bb = base.bounds()
     assert abs(bb[5] - BASE_H) < 1e-4, bb
     assert abs(max(abs(bb[0]), abs(bb[1])) - BASE_R_BOT) < 0.006, bb
-    hb = front.bounds()
-    assert hb[1] > 0.04 and hb[0] < -0.04, hb
-    assert abs((back.bounds()[5] - front.bounds()[4]) - HEAD_H) < 0.004
+    hb = head_shell.bounds()
+    assert abs((hb[1] - hb[0]) - HEAD_W) < 0.002, hb
+    assert abs((hb[5] - hb[4]) - HEAD_H) < 0.002, hb
     db = dock.bounds()
     assert abs(db[1] - db[0] - DOCK) < 0.004, db
     assert abs(db[5] - db[4] - DOCK_H) < 0.003, db
-    assert abs(HEAD_CENTER_Z + HEAD_H / 2 - 0.190) < 1e-6
+    assert abs(OVERALL_HEIGHT_M - 0.146) < 1e-6
     screen_n = _mean_normal(screen)
     assert screen_n[1] < -0.5, screen_n
     clock_n = _mean_normal(clock)
@@ -1455,25 +1633,22 @@ def main() -> None:
 
     PROTO_DIR.mkdir(parents=True, exist_ok=True)
     robot_path = PROTO_DIR / "GemaBotReview.proto"
-    dock_path = PROTO_DIR / "GemaClockDock.proto"
     robot_path.write_text(
-        robot_proto(base, front, back, cap_f, cap_b, bezel, screen),
+        robot_proto(base, head_shell, logo_mesh, bezel, screen),
         encoding="utf-8",
     )
-    dock_path.write_text(dock_proto(dock, clock), encoding="utf-8")
     WORLD_PATH.write_text(world_file((0.30, 0.06)), encoding="utf-8")
-    for path in (robot_path, dock_path, WORLD_PATH):
+    for path in (robot_path, WORLD_PATH):
         check_vrml(path)
     proto_text = robot_path.read_text(encoding="utf-8")
     for name in ("oled_display", "camera", "head_yaw", "head_pitch", "yaw_sensor", "pitch_sensor", "head_touch"):
         if f'name "{name}"' not in proto_text:
             raise SystemExit(f"missing device {name}")
-    if 'width 128' not in proto_text or "height 64" not in proto_text:
-        raise SystemExit("OLED size is not 128x64")
+    if f"width {OLED_DISP_W}" not in proto_text or f"height {OLED_DISP_H}" not in proto_text:
+        raise SystemExit(f"OLED size is not {OLED_DISP_W}x{OLED_DISP_H}")
     print(f"wrote {robot_path.relative_to(ROOT)} ({robot_path.stat().st_size} bytes)")
-    print(f"wrote {dock_path.relative_to(ROOT)} ({dock_path.stat().st_size} bytes)")
     print(f"wrote {WORLD_PATH.relative_to(ROOT)}")
-    print(f"head seam y={seam:.4f}  head-center z={HEAD_CENTER_Z:.3f}  total height 0.190")
+    print(f"ball-center z={BALL_CENTER_Z:.4f}  head-center z={HEAD_CENTER_Z:.3f}  total height {OVERALL_HEIGHT_M:.3f}")
 
 
 if __name__ == "__main__":

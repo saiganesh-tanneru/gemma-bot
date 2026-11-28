@@ -1,14 +1,13 @@
 #VRML_SIM R2025a utf8
-# GemaBot review-plan desk scene.
-# Robot: 190 mm stationary companion, 96 mm tapered base, 95x80x75 mm head,
-# 65x49 mm face, pan/tilt neck. Dock: 99x99x16 mm clock charger.
+# Chintu fitted-CAD desk scene.
+# Robot: 146 mm stationary companion, Ø86 mm tapered base, Ø32 mm ball socket,
+# 68x58x46 mm seamless head, 47.2x39.2 mm (502x410) AMOLED, 50x30 mm solar crown bumper.
 # Controller, device names, and the Sarvam voice pipeline are unchanged.
 
 EXTERNPROTO "../protos/GemaBotReview.proto"
-EXTERNPROTO "../protos/GemaClockDock.proto"
 
 WorldInfo {
-  title "GemaBot Review Plan"
+  title "Chintu Desktop Companion"
   info [
     "Review-plan concept: stationary GemaBot on a clock charging dock, WFH desk."
     "Reuses gemma_bot_controller (head_yaw, head_pitch, oled_display, camera, head_touch)."
@@ -383,9 +382,6 @@ Solid {
   ]
 }
 
-GemaClockDock {
-  translation 0.3 0.06 0.74
-}
 GemaBotReview {
-  translation 0.3 0.06 0.753
+  translation 0.3 0.06 0.74
 }

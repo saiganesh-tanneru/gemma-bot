@@ -1,0 +1,584 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Chintu by Sarworks — Face Playground</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #0b0e14;
+      --panel: #141923;
+      --border: #252f42;
+      --text: #e6edf7;
+      --muted: #8ea0bd;
+      --accent: #8ec9db;
+      --ok: #4ce894;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      padding: 20px;
+      background: var(--bg);
+      color: var(--text);
+      font-family: ui-sans-serif, system-ui, -apple-system, sans-serif;
+      display: flex;
+      justify-content: center;
+    }
+    .layout {
+      max-width: 1080px;
+      width: 100%;
+      display: grid;
+      grid-template-columns: 430px 1fr;
+      gap: 20px;
+      align-items: start;
+    }
+    @media (max-width: 900px) {
+      .layout { grid-template-columns: 1fr; }
+    }
+    .bezel {
+      background: #181c24;
+      border: 2px solid #2c3547;
+      border-radius: 36px;
+      padding: 10px;
+      width: 430px;
+      box-shadow: 0 24px 60px rgba(0,0,0,0.65);
+    }
+    canvas {
+      display: block;
+      width: 410px;
+      height: 502px;
+      background: #000000;
+      border-radius: 28px;
+      cursor: pointer;
+    }
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 16px;
+      margin-bottom: 14px;
+    }
+    h1 { margin: 0 0 4px 0; font-size: 20px; }
+    .sub { margin: 0 0 12px 0; color: var(--muted); font-size: 13px; }
+    .row { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
+    input[type="text"] {
+      flex: 1;
+      min-width: 200px;
+      background: #0b0e14;
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 10px 12px;
+      font-size: 14px;
+    }
+    button {
+      background: #1f293b;
+      color: var(--text);
+      border: 1px solid #32415c;
+      border-radius: 10px;
+      padding: 8px 12px;
+      font-size: 13px;
+      cursor: pointer;
+    }
+    button:hover { border-color: var(--accent); }
+    button.primary { background: #1d4e61; border-color: var(--accent); font-weight: 600; }
+    .metrics {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+      font-size: 12px;
+    }
+    .metric {
+      background: #0b0e14;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 8px 10px;
+    }
+    .metric span { display: block; color: var(--muted); font-size: 11px; }
+    .metric strong { font-size: 15px; color: var(--accent); }
+    .log {
+      background: #0b0e14;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 10px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 12px;
+      max-height: 180px;
+      overflow-y: auto;
+      line-height: 1.45;
+    }
+  </style>
+</head>
+<body>
+  <div class="layout">
+    <div>
+      <div class="bezel">
+        <canvas id="amoled" width="410" height="502" title="Tap Chintu's head"></canvas>
+      </div>
+      <p class="sub" style="text-align:center;margin-top:8px;">
+        410×502 AMOLED · 128×64 design space ×3.203 (410×205 band centred vertically) · Click screen to tap head
+      </p>
+    </div>
+
+    <div>
+      <div class="card">
+        <h1>Chintu by Sarworks — Face Playground</h1>
+        <p class="sub">Local-first wake ritual, charging sleep, and storyboard reference (no TTS, no voice greeting).</p>
+        <form id="phraseForm" class="row">
+          <input id="phraseInput" type="text" value="wake Chintu up" placeholder='Try "wake Chintu up", "hello Chintu!", "kick Chintu off", "shake Chintu", or "set alarm 5s"' />
+          <button type="submit" class="primary">Send Phrase</button>
+          <button type="button" onclick="saySomething()">Say Something</button>
+        </form>
+        <div id="cmdStatus" class="sub" style="margin-bottom:10px;min-height:18px;"></div>
+        <div class="row">
+          <button onclick="sendCmd({tap:true})">Tap Head</button>
+          <button onclick="sendCmd({alarm:true})">Alarm Trigger</button>
+          <button onclick="sendCmd({alarm_in_s:5})">Alarm in 5s</button>
+          <button onclick="sendCmd({cold_startup:true})">Cold Power-On</button>
+          <button id="chargeBtn" onclick="toggleCharge()">Charging: OFF</button>
+          <button id="dockBtn" onclick="toggleDock()">Docked: ON</button>
+          <button onclick="kickOffDock()">Kicked Off Dock (Unplug + Detach)</button>
+          <button onclick="sendCmd({shake:true})">Shake Chintu</button>
+          <button onclick="sendCmd({clap:true})">Loud Clap</button>
+          <button onclick="sendCmd({face_pan_deg:18})">Face Appears (+18°)</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <div style="font-size:13px;font-weight:600;margin-bottom:8px;">7 Storyboard States (Frame-for-Frame)</div>
+        <div class="row">
+          <button onclick="previewState('sleep')">1. Sleep</button>
+          <button onclick="previewState('stir')">2. Stir</button>
+          <button onclick="previewState('flutter')">3. Flutter</button>
+          <button onclick="previewState('yawn')">4. Yawn</button>
+          <button onclick="previewState('look')">5. Look</button>
+          <button onclick="previewState('found_you')">6. Found You</button>
+          <button onclick="previewState('content_idle')">7. Content Idle</button>
+          <button onclick="clearPreview()">Live Mode</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="metrics">
+          <div class="metric"><span>State</span><strong id="mState">SLEEP</strong></div>
+          <div class="metric"><span>Mood</span><strong id="mMood">SLEEPY</strong></div>
+          <div class="metric"><span>Pan / Tilt</span><strong id="mPose">0° / -12°</strong></div>
+          <div class="metric"><span>Energy / Boredom / Bond</span><strong id="mMeters">100 / 0 / 0</strong></div>
+          <div class="metric"><span>Servos / Dock</span><strong id="mServos">Attached / Docked</strong></div>
+          <div class="metric"><span>Last Wake / Alarm</span><strong id="mWake">—</strong></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div style="font-size:13px;font-weight:600;margin-bottom:8px;">[BOT: ...] Tag & Audio Cue Log</div>
+        <div id="tagLog" class="log">Waiting for Chintu status...</div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const canvas = document.getElementById('amoled');
+    const ctx = canvas.getContext('2d');
+    const DESIGN_W = 128, DESIGN_H = 64;
+    const SCALE = Math.min(410 / DESIGN_W, 502 / DESIGN_H); // 3.203125
+    const BAND_X = (410 - DESIGN_W * SCALE) / 2;
+    const BAND_Y = (502 - DESIGN_H * SCALE) / 2;
+
+    let charging = false;
+    let docked = true;
+    let previewMode = null;
+    let lastWakeCount = 0;
+    let lastState = '';
+    let lastAudioSeq = 0;
+    const stirAudio = new Audio('/assets/stir-chirp.wav');
+    const yawnAudio = new Audio('/assets/chintu-baby-yawn.wav');
+    const sfxPlayer = new Audio();
+
+    function sx(x) { return BAND_X + x * SCALE; }
+    function sy(y) { return BAND_Y + y * SCALE; }
+    function sw(w) { return w * SCALE; }
+
+    function rgbHex(hex, b) {
+      const r = Math.round(((hex >> 16) & 255) * b);
+      const g = Math.round(((hex >> 8) & 255) * b);
+      const bl = Math.round((hex & 255) * b);
+      return `rgb(${r},${g},${bl})`;
+    }
+
+    function drawRoundRectDesign(x, y, w, h, r, color) {
+      ctx.fillStyle = color;
+      ctx.beginPath();
+      ctx.roundRect(sx(x), sy(y), sw(w), sw(h), Math.min(r * SCALE, sw(w)/2, sw(h)/2));
+      ctx.fill();
+    }
+
+    function drawOvalDesign(cx, cy, w, h, color) {
+      ctx.fillStyle = color;
+      ctx.beginPath();
+      ctx.ellipse(sx(cx), sy(cy), sw(w) / 2, sw(h) / 2, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    function drawFrame(f) {
+      ctx.fillStyle = '#000000';
+      ctx.fillRect(0, 0, 410, 502);
+
+      const b = f.brightness ?? 1.0;
+      const gx = Math.max(-1, Math.min(1, f.gaze_x || 0)) * 7.0;
+      const gy = Math.max(-1, Math.min(1, f.gaze_y || 0)) * 4.5;
+      const bx = f.face_bob_x || 0;
+      const by = f.face_bob_y || 0;
+      const lcx = 40 + gx + bx, rcx = 88 + gx + bx, ecy = 28 + gy + by;
+      const mcx = 64 + gx * 0.4 + bx, mcy = 28 + gy * 0.5 + by;
+      const blink = f.blink_progress || 0;
+
+      const drawEye = (cx, cy, openAmt, isLeft) => {
+        const op = Math.max(0, Math.min(1, openAmt)) * Math.max(0, 1 - blink);
+        const ew = Math.min(26, 24 * (f.eye_scale || 1));
+        const eh = Math.min(22, 21 * (f.eye_scale || 1));
+        if (f.happy_arcs) {
+          ctx.fillStyle = rgbHex(0xA8ECFF, b);
+          for (let i = -12; i <= 12; i++) {
+            const u = i / 12;
+            ctx.fillRect(sx(cx + u * ew * 0.46 - 1.4), sy(cy - 4 + u*u*7.5 - 1.2), sw(2.8), sw(2.6));
+          }
+          return;
+        }
+        if (f.mood === 'DIZZY') {
+          const turns = 3.0 * 2.0 * Math.PI;
+          const steps = 44;
+          const rot = (f.dizzy_phase || 0) * 12 * (isLeft ? 1 : -1);
+          ctx.fillStyle = rgbHex(0xA8ECFF, b);
+          for (let i = 0; i <= steps; i++) {
+            const t = i / steps;
+            const theta = t * turns + rot;
+            const rad = 1.0 + t * 8.2;
+            const px = cx + rad * Math.cos(theta);
+            const py = cy + rad * Math.sin(theta);
+            ctx.fillRect(sx(px - 1.05), sy(py - 1.05), sw(2.1), sw(2.1));
+          }
+          ctx.fillStyle = rgbHex(0xFFFFFF, b);
+          ctx.fillRect(sx(cx - 1.1), sy(cy - 1.1), sw(2.2), sw(2.2));
+          return;
+        }
+        if (op <= 0.06) {
+          if (f.face_mode === 'sleep') {
+            ctx.fillStyle = rgbHex(0x8EC9DB, b);
+            for (let i = -10; i <= 10; i++) {
+              const u = i / 10;
+              ctx.fillRect(sx(cx + u * ew * 0.46 - 1.2), sy(cy + 2.5 - u*u*3 - 1), sw(2.4), sw(2.2));
+            }
+          } else {
+            drawRoundRectDesign(cx - ew * 0.48, cy - 1.2, ew * 0.96, 2.4, 1, rgbHex(0x8EC9DB, b));
+          }
+          return;
+        }
+        const curH = Math.max(2.8, eh * op);
+        const r = Math.min(7, ew * 0.35, curH * 0.45);
+        drawRoundRectDesign(cx - ew / 2, cy - curH / 2, ew, curH, r, rgbHex(0x8EC9DB, b));
+        if (op >= 0.45) {
+          const hl = f.mood === 'PLEADING' ? 4.4 : ((f.sparkles || 0) > 0.1 ? 4.2 : 3.2);
+          drawRoundRectDesign(cx - ew * 0.28, cy - curH * 0.3, hl, hl, 1, rgbHex(0xFFFFFF, b));
+          if (f.mood === 'PLEADING') {
+            drawRoundRectDesign(cx + ew * 0.12, cy + curH * 0.12, 2.2, 2.2, 0.8, rgbHex(0xFFFFFF, b));
+          }
+        }
+        if ((f.sparkles || 0) > 0.1 && op >= 0.5) {
+          const sb = b * f.sparkles;
+          ctx.fillStyle = rgbHex(0xFFFFFF, sb);
+          ctx.fillRect(sx(cx + ew * 0.14), sy(cy + curH * 0.1), sw(2.4), sw(2.4));
+          ctx.fillRect(sx(cx - ew * 0.36), sy(cy - curH * 0.42), sw(1.6), sw(4.2));
+          ctx.fillRect(sx(cx - ew * 0.44), sy(cy - curH * 0.34), sw(4.2), sw(1.6));
+        }
+      };
+
+      drawEye(lcx, ecy, f.left_eye_open ?? 1, true);
+      drawEye(rcx, ecy, f.right_eye_open ?? 1, false);
+
+      if ((f.talk_open || 0) > 0.02) {
+        const o = Math.max(0, Math.min(1, f.talk_open));
+        const wm = Math.max(0, Math.min(1, f.talk_width ?? 0.5));
+        const hw = 6.8 + 2.6 * wm;
+        const depth = 2.2 + 8.2 * o;
+        ctx.beginPath();
+        const steps = 24;
+        for (let i = -steps; i <= steps; i++) {
+          const u = i / steps;
+          const x = sx(mcx + u * hw);
+          const yTop = sy(mcy + 16.5 - u * u * 2.4);
+          if (i === -steps) ctx.moveTo(x, yTop);
+          else ctx.lineTo(x, yTop);
+        }
+        for (let i = steps; i >= -steps; i--) {
+          const u = i / steps;
+          const arc = Math.sqrt(Math.max(0, 1 - u * u));
+          const x = sx(mcx + u * hw);
+          const yBot = sy(mcy + 16.5 - u * u * 2.4 + depth * arc);
+          ctx.lineTo(x, yBot);
+        }
+        ctx.closePath();
+        ctx.fillStyle = rgbHex(0x8EC9DB, b);
+        ctx.fill();
+        if (o > 0.28) {
+          ctx.save();
+          ctx.beginPath();
+          for (let i = -steps; i <= steps; i++) {
+            const u = i / steps;
+            const x = sx(mcx + u * (hw - 1.5));
+            const yTop = sy(mcy + 16.5 - u * u * 2.4 + 1.5);
+            if (i === -steps) ctx.moveTo(x, yTop);
+            else ctx.lineTo(x, yTop);
+          }
+          for (let i = steps; i >= -steps; i--) {
+            const u = i / steps;
+            const arc = Math.sqrt(Math.max(0, 1 - u * u));
+            const x = sx(mcx + u * (hw - 1.5));
+            const yBot = sy(mcy + 16.5 - u * u * 2.4 + Math.max(1.8, depth - 1.4) * arc);
+            ctx.lineTo(x, yBot);
+          }
+          ctx.closePath();
+          ctx.fillStyle = '#101820';
+          ctx.fill();
+          if (o > 0.45) {
+            ctx.clip();
+            drawOvalDesign(mcx, mcy + 16.5 + depth * 0.72, hw * 0.95, depth * 0.55, rgbHex(0xFF5C8A, b));
+          }
+          ctx.restore();
+        }
+      } else if ((f.mouth_open || 0) > 0.02) {
+        const wob = 1 + (f.mouth_wobble || 0);
+        const mw = Math.max(4, 36 * f.mouth_open * wob);
+        const mh = Math.max(3, 28 * f.mouth_open * (2 - wob));
+        drawOvalDesign(mcx, mcy + 16, mw, mh, rgbHex(0x8EC9DB, b));
+        if (f.mouth_open > 0.5) {
+          drawOvalDesign(mcx, mcy + 16 + mh * 0.36, mw * 0.34, mh * 0.24, '#101820');
+        }
+      } else if (f.face_mode === 'sleep') {
+        drawRoundRectDesign(mcx - 3.5, mcy + 16, 7, 2, 1, rgbHex(0x8EC9DB, b));
+      } else if (f.mood === 'SURPRISED') {
+        drawOvalDesign(mcx, mcy + 16, 7, 7, rgbHex(0x8EC9DB, b));
+      } else if (f.mood === 'DIZZY') {
+        ctx.fillStyle = rgbHex(0x8EC9DB, b);
+        for (let i = -6; i <= 6; i++) {
+          const u = i / 6;
+          ctx.fillRect(sx(mcx + u * 7 - 1), sy(mcy + 16 + Math.sin(u * Math.PI * 2) * 1.6), sw(2.2), sw(2.0));
+        }
+      } else if (f.mood === 'PLEADING') {
+        const quiver = Math.sin((f.dizzy_phase || 0) * 28) * 0.45;
+        drawRoundRectDesign(mcx - 3.8, mcy + 16.2 + quiver, 7.6, 2.4, 1, rgbHex(0x8EC9DB, b));
+      } else {
+        const sa = f.smile_amount ?? 0.35;
+        const smw = 10 + 6 * sa;
+        ctx.fillStyle = rgbHex(0x8EC9DB, b);
+        for (let i = -8; i <= 8; i++) {
+          const u = i / 8;
+          ctx.fillRect(sx(mcx + u * smw * 0.5 - 1.1), sy(mcy + 16.5 - u*u*(1.8 + 1.8*sa) - 0.9), sw(2.2), sw(2.0));
+        }
+      }
+
+      if ((f.zzz_phase ?? -1) >= 0) {
+        const zp = Math.max(0, Math.min(1, f.zzz_phase));
+        const fade = 1 - Math.max(0, (zp - 0.65) / 0.35);
+        const zx = 104 + zp * 6, zy = 18 - zp * 6, zs = 6, t = 1.3;
+        ctx.fillStyle = rgbHex(0x3D6878, b * fade);
+        ctx.fillRect(sx(zx), sy(zy), sw(zs), sw(t));
+        for (let i = 0; i < 5; i++) {
+          const u = i / 4;
+          ctx.fillRect(sx(zx + (1 - u) * (zs - t)), sy(zy + u * (zs - t)), sw(t), sw(t));
+        }
+        ctx.fillRect(sx(zx), sy(zy + zs - t), sw(zs), sw(t));
+      }
+
+      if ((f.heart_alpha || 0) > 0.05) {
+        const col = rgbHex(0xFF5C8A, b * f.heart_alpha);
+        ctx.fillStyle = col;
+        const hx = 114, hy = 12;
+        ctx.fillRect(sx(hx - 4), sy(hy - 2.5), sw(3.2), sw(3));
+        ctx.fillRect(sx(hx + 0.8), sy(hy - 2.5), sw(3.2), sw(3));
+        ctx.fillRect(sx(hx - 5), sy(hy - 0.5), sw(10), sw(2.8));
+        ctx.fillRect(sx(hx - 3.8), sy(hy + 2), sw(7.6), sw(2.2));
+        ctx.fillRect(sx(hx - 2.2), sy(hy + 4), sw(4.4), sw(1.8));
+      }
+
+      if ((f.alert_alpha || 0) > 0.05) {
+        ctx.fillStyle = rgbHex(0xFFD95A, b * f.alert_alpha);
+        const ax = 114 + bx * 0.5, ay = 13 + by * 0.5;
+        ctx.fillRect(sx(ax - 1.4), sy(ay - 6), sw(2.8), sw(7));
+        ctx.fillRect(sx(ax - 1.4), sy(ay + 2.6), sw(2.8), sw(2.6));
+      }
+
+      if ((f.bell_alpha || 0) > 0.05) {
+        const ba = b * f.bell_alpha;
+        const p = f.dizzy_phase || 0;
+        const shake = Math.sin(p * 38) * 1.4;
+        const bx0 = 14 + shake, by0 = 13;
+        ctx.fillStyle = rgbHex(0xFFD95A, ba);
+        ctx.fillRect(sx(bx0 - 1.5), sy(by0 - 5.5), sw(3), sw(1.5));
+        ctx.fillRect(sx(bx0 - 3.5), sy(by0 - 4), sw(7), sw(4));
+        ctx.fillRect(sx(bx0 - 5), sy(by0), sw(10), sw(2));
+        ctx.fillStyle = rgbHex(0xFFFFFF, ba);
+        ctx.fillRect(sx(bx0 - 1.2 + shake * 0.5), sy(by0 + 2.2), sw(2.4), sw(2));
+        if (Math.floor(p * 12) % 2 === 0) {
+          ctx.fillStyle = rgbHex(0xA8ECFF, ba);
+          ctx.fillRect(sx(bx0 - 7.5), sy(by0 - 3), sw(1.4), sw(3.5));
+          ctx.fillRect(sx(bx0 + 6.1), sy(by0 - 3), sw(1.4), sw(3.5));
+        }
+      }
+
+      if ((f.sweat_alpha || 0) > 0.05) {
+        const sa = b * f.sweat_alpha;
+        const sx0 = 109 + bx * 0.6;
+        const sy0 = 14 + by * 0.6 + (((f.dizzy_phase || 0) * 3) % 4);
+        ctx.fillStyle = rgbHex(0x44AAFF, sa);
+        ctx.fillRect(sx(sx0 - 1), sy(sy0 - 3), sw(2), sw(2.2));
+        ctx.fillRect(sx(sx0 - 2), sy(sy0 - 1), sw(4), sw(3));
+        ctx.fillRect(sx(sx0 - 1.4), sy(sy0 + 2), sw(2.8), sw(1.4));
+        ctx.fillStyle = rgbHex(0xFFFFFF, sa);
+        ctx.fillRect(sx(sx0 - 0.8), sy(sy0 - 0.5), sw(1.2), sw(1.4));
+      }
+
+      if (f.mood === 'THINKING') {
+        const dotPhase = Math.floor((f.dizzy_phase || 0) * 3) % 3;
+        for (let i = 0; i < 3; i++) {
+          ctx.fillStyle = rgbHex(i === dotPhase ? 0xA8ECFF : 0x3D6878, b);
+          ctx.fillRect(sx(96 + i * 6), sy(9), sw(3), sw(3));
+        }
+      }
+
+      if (f.is_charging) {
+        const col = rgbHex(0x4CE894, Math.max(0.55, b));
+        ctx.fillStyle = col;
+        ctx.fillRect(372, 18, 22, 12);
+        ctx.fillStyle = '#000000';
+        ctx.fillRect(374, 20, 18, 8);
+        ctx.fillStyle = col;
+        ctx.fillRect(394, 21, 3, 6);
+        ctx.fillRect(381, 21, 4, 3);
+        ctx.fillRect(379, 23, 7, 2);
+        ctx.fillRect(382, 25, 4, 3);
+      }
+    }
+
+    function setCmdStatus(msg, isError = false) {
+      const el = document.getElementById('cmdStatus');
+      if (el) {
+        el.textContent = msg;
+        el.style.color = isError ? '#fb7185' : '#4ce894';
+      }
+    }
+
+    async function sendCmd(payload) {
+      previewMode = null;
+      try {
+        const res = await fetch('/command', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        if (!res.ok) {
+          setCmdStatus(`Command failed (HTTP ${res.status})`, true);
+          return;
+        }
+        const label = payload.phrase ? `Sent "${payload.phrase}"` : `Sent ${Object.keys(payload).join(', ')}`;
+        setCmdStatus(label, false);
+      } catch (err) {
+        setCmdStatus('Playground server disconnected — restart run_playground.py and refresh.', true);
+      }
+    }
+
+    document.getElementById('phraseForm').addEventListener('submit', (e) => {
+      e.preventDefault();
+      const val = document.getElementById('phraseInput').value.trim();
+      if (!val) return;
+      sendCmd({ phrase: val });
+    });
+    function saySomething() {
+      const val = document.getElementById('phraseInput').value.trim();
+      sendCmd({ talk: val && val.toLowerCase() !== 'wake chintu up' ? val : 'hello Chintu!' });
+    }
+    canvas.addEventListener('click', () => sendCmd({ tap: true }));
+
+    function toggleCharge() {
+      charging = !charging;
+      document.getElementById('chargeBtn').textContent = `Charging: ${charging ? 'ON' : 'OFF'}`;
+      sendCmd({ is_charging: charging });
+    }
+    function toggleDock() {
+      docked = !docked;
+      document.getElementById('dockBtn').textContent = `Docked: ${docked ? 'ON' : 'OFF'}`;
+      sendCmd({ is_docked: docked });
+    }
+    function kickOffDock() {
+      charging = false;
+      docked = false;
+      document.getElementById('chargeBtn').textContent = 'Charging: OFF';
+      document.getElementById('dockBtn').textContent = 'Docked: OFF';
+      sendCmd({ kicked_off_dock: true });
+    }
+
+    function previewState(name) { previewMode = name; }
+    function clearPreview() { previewMode = null; }
+
+    function getPreviewFrame(name, t) {
+      if (name === 'sleep') return { face_mode:'sleep', mood:'SLEEPY', left_eye_open:0, right_eye_open:0, zzz_phase:(t%3)/3, face_bob_y:Math.sin(t*Math.PI/2), is_charging:charging, brightness:0.4 };
+      if (name === 'stir') return { face_mode:'stir', mood:'SLEEPY', left_eye_open:0.25, right_eye_open:0.15, brightness:0.8 };
+      if (name === 'flutter') return { face_mode:'flutter', mood:'SLEEPY', left_eye_open:0.65, right_eye_open:0.65, brightness:1 };
+      if (name === 'yawn') return { face_mode:'yawn', mood:'SLEEPY', left_eye_open:0, right_eye_open:0.35, mouth_open:1, mouth_wobble:0.04*Math.sin(t*14), face_bob_y:1.6*Math.sin(t*9), brightness:1 };
+      if (name === 'look') return { face_mode:'look', mood:'SURPRISED', left_eye_open:1, right_eye_open:1, eye_scale:1.08, gaze_x:Math.sin(t*2)*0.85, smile_amount:0.15, brightness:1 };
+      if (name === 'found_you') return { face_mode:'found_you', mood:'HAPPY', left_eye_open:1, right_eye_open:1, sparkles:1, heart_alpha:1, smile_amount:0.95, brightness:1 };
+      return { face_mode:'content_idle', mood:'NEUTRAL', left_eye_open:1, right_eye_open:1, smile_amount:0.35, brightness:1 };
+    }
+
+    async function poll() {
+      try {
+        if (previewMode) {
+          drawFrame(getPreviewFrame(previewMode, performance.now() / 1000));
+        } else {
+          const res = await fetch('/status');
+          const s = await res.json();
+          if (s.state !== lastState) {
+            if (!s.host_audio && s.state === 'STIR') { stirAudio.currentTime = 0; stirAudio.play().catch(()=>{}); }
+            lastState = s.state;
+          }
+          if (!s.host_audio && (s.frame && s.frame.mouth_open > 0.05) && yawnAudio.paused && s.state === 'YAWN') {
+            yawnAudio.currentTime = 0; yawnAudio.play().catch(()=>{});
+          }
+          if (!s.host_audio && s.last_audio_cue && s.last_audio_cue.seq > lastAudioSeq) {
+            lastAudioSeq = s.last_audio_cue.seq;
+            const cue = s.last_audio_cue.cue || '';
+            if (cue.startsWith('reaction_')) {
+              const kind = cue.slice('reaction_'.length);
+              sfxPlayer.src = `/assets/sfx/${kind}.wav`;
+              sfxPlayer.currentTime = 0;
+              sfxPlayer.play().catch(()=>{});
+            }
+          }
+          drawFrame(s.frame || {});
+          charging = Boolean(s.is_charging);
+          docked = Boolean(s.is_docked);
+          document.getElementById('chargeBtn').textContent = `Charging: ${charging ? 'ON' : 'OFF'}`;
+          document.getElementById('dockBtn').textContent = `Docked: ${docked ? 'ON' : 'OFF'}`;
+          document.getElementById('mState').textContent = s.state;
+          document.getElementById('mMood').textContent = s.mood;
+          document.getElementById('mPose').textContent = `${s.pan_deg}° / ${s.tilt_deg}°`;
+          document.getElementById('mMeters').textContent = `${Math.round(s.energy)} / ${Math.round(s.boredom)} / ${Math.round(s.bond)}`;
+          document.getElementById('mServos').textContent = `${s.servos_attached ? 'Attached' : 'Detached'} / ${s.is_docked ? 'Docked' : 'Keychain'}`;
+          const wakeStr = s.last_wake_duration_s ? `${s.last_wake_duration_s.toFixed(2)}s` : '—';
+          const alarmStr = (s.alarm_remaining_s !== null && s.alarm_remaining_s !== undefined) ? ` · ⏰ ${s.alarm_remaining_s.toFixed(1)}s` : '';
+          document.getElementById('mWake').textContent = wakeStr + alarmStr;
+          const logEl = document.getElementById('tagLog');
+          if (Array.isArray(s.tag_log) && s.tag_log.length) {
+            logEl.innerHTML = s.tag_log.slice(-14).map(e => `[${e.timestamp_s.toFixed(2)}s] (${e.state}) ${e.tag}`).join('<br>');
+          }
+        }
+      } catch (e) {
+        // Offline / standalone preview fallback
+        drawFrame(getPreviewFrame(previewMode || 'sleep', performance.now() / 1000));
+      }
+      requestAnimationFrame(poll);
+    }
+    requestAnimationFrame(poll);
+  </script>
+</body>
+</html>

@@ -1,0 +1,206 @@
+{
+  "preset": "fitted",
+  "params": {
+    "name": "fitted",
+    "base_d_bot": 86.0,
+    "base_d_top": 78.0,
+    "base_h": 50.0,
+    "ring_groove_z": 6.5,
+    "neck_d_bot": 36.0,
+    "neck_d_top": 24.0,
+    "neck_h": 24.0,
+    "ball_d": 32.0,
+    "ball_cup_depth": 11.0,
+    "head_w": 68.0,
+    "head_h": 58.0,
+    "head_d": 46.0,
+    "head_wall": 2.5,
+    "head_fillet": 7.0,
+    "amoled_w": 47.2,
+    "amoled_h": 39.2,
+    "amoled_recess_d": 2.2,
+    "pogo_ring_d": 24.0,
+    "pogo_ring_h": 4.2,
+    "pogo_pin_pcd": 17.5,
+    "pogo_pin_d": 1.7,
+    "pogo_pad_d": 3.6,
+    "magnet_d": 12.2,
+    "magnet_h": 3.0,
+    "head_seat_above_ball": 15.5,
+    "pan_deg": 80.0,
+    "tilt_deg": 26.0
+  },
+  "ball_center_z_mm": 72.5,
+  "overall_height_mm": 146.0,
+  "kinematics": {
+    "collision_pass": true,
+    "cases": [
+      {
+        "pose": "neutral_0_0",
+        "pan_deg": 0.0,
+        "pitch_deg": 0.0,
+        "roll_deg": 0.0,
+        "intersection_mm3": 0,
+        "head_zmin_mm": 83.8,
+        "neck_cup_zmax_mm": 71.5,
+        "clearance_to_neck_rim_mm": 12.3,
+        "clearance_to_base_top_mm": 33.8,
+        "collides": false
+      },
+      {
+        "pose": "pitch_fwd_+26",
+        "pan_deg": 0.0,
+        "pitch_deg": 26.0,
+        "roll_deg": 0.0,
+        "intersection_mm3": 0,
+        "head_zmin_mm": 77.4,
+        "neck_cup_zmax_mm": 71.5,
+        "clearance_to_neck_rim_mm": 5.9,
+        "clearance_to_base_top_mm": 27.4,
+        "collides": false
+      },
+      {
+        "pose": "pitch_back_-26",
+        "pan_deg": 0.0,
+        "pitch_deg": -26.0,
+        "roll_deg": 0.0,
+        "intersection_mm3": 0,
+        "head_zmin_mm": 77.4,
+        "neck_cup_zmax_mm": 71.5,
+        "clearance_to_neck_rim_mm": 5.9,
+        "clearance_to_base_top_mm": 27.4,
+        "collides": false
+      },
+      {
+        "pose": "roll_right_+26",
+        "pan_deg": 0.0,
+        "pitch_deg": 0.0,
+        "roll_deg": 26.0,
+        "intersection_mm3": 0,
+        "head_zmin_mm": 73.89,
+        "neck_cup_zmax_mm": 71.5,
+        "clearance_to_neck_rim_mm": 2.39,
+        "clearance_to_base_top_mm": 23.89,
+        "collides": false
+      },
+      {
+        "pose": "roll_left_-26",
+        "pan_deg": 0.0,
+        "pitch_deg": 0.0,
+        "roll_deg": -26.0,
+        "intersection_mm3": 0,
+        "head_zmin_mm": 73.89,
+        "neck_cup_zmax_mm": 71.5,
+        "clearance_to_neck_rim_mm": 2.39,
+        "clearance_to_base_top_mm": 23.89,
+        "collides": false
+      },
+      {
+        "pose": "pan_right_+80_pitch_+26",
+        "pan_deg": 80.0,
+        "pitch_deg": 26.0,
+        "roll_deg": 0.0,
+        "intersection_mm3": 0,
+        "head_zmin_mm": 77.4,
+        "neck_cup_zmax_mm": 71.5,
+        "clearance_to_neck_rim_mm": 5.9,
+        "clearance_to_base_top_mm": 27.4,
+        "collides": false
+      },
+      {
+        "pose": "pan_left_-80_roll_+26",
+        "pan_deg": -80.0,
+        "pitch_deg": 0.0,
+        "roll_deg": 26.0,
+        "intersection_mm3": 0,
+        "head_zmin_mm": 73.89,
+        "neck_cup_zmax_mm": 71.5,
+        "clearance_to_neck_rim_mm": 2.39,
+        "clearance_to_base_top_mm": 23.89,
+        "collides": false
+      },
+      {
+        "pose": "corner_pitch_+26_roll_+26",
+        "pan_deg": 80.0,
+        "pitch_deg": 26.0,
+        "roll_deg": 26.0,
+        "intersection_mm3": 0,
+        "head_zmin_mm": 65.54,
+        "neck_cup_zmax_mm": 71.5,
+        "clearance_to_neck_rim_mm": -5.96,
+        "clearance_to_base_top_mm": 15.54,
+        "collides": false
+      }
+    ],
+    "pogo_alignment": {
+      "recommended_mount": "on_rotating_ball_crown",
+      "slip_on_ball_mm": 0.0,
+      "pads_stay_aligned": true,
+      "if_mounted_on_fixed_neck_slip_mm": 2.73,
+      "if_mounted_on_fixed_neck_lift_gap_mm": 7.67
+    }
+  },
+  "com_and_torque": {
+    "shell_volume_cm3": 36.14,
+    "total_head_mass_g": 90.6,
+    "components": [
+      {
+        "name": "printed_head_shell",
+        "mass_g": 42.6,
+        "pos_mm": [
+          0.0,
+          2.8,
+          116.9
+        ]
+      },
+      {
+        "name": "amoled_2.06_panel",
+        "mass_g": 14.0,
+        "pos_mm": [
+          0.0,
+          -20.5,
+          117.0
+        ]
+      },
+      {
+        "name": "esp32_s3_pcb_mics",
+        "mass_g": 12.0,
+        "pos_mm": [
+          0.0,
+          2.0,
+          117.0
+        ]
+      },
+      {
+        "name": "lipo_600mah_battery",
+        "mass_g": 14.0,
+        "pos_mm": [
+          0.0,
+          15.0,
+          114.0
+        ]
+      },
+      {
+        "name": "n52_magnet_pogo_pcb",
+        "mass_g": 8.0,
+        "pos_mm": [
+          0.0,
+          0.0,
+          90.0
+        ]
+      }
+    ],
+    "com_relative_to_ball_mm": {
+      "x": 0.0,
+      "y_front_neg": 0.72,
+      "z_above_ball": 41.59
+    },
+    "tilt_deg": 26.0,
+    "lever_arm_at_26deg_mm": 18.88,
+    "static_holding_torque_kg_cm": 0.171,
+    "dynamic_peak_torque_kg_cm": 0.342,
+    "sg90_headroom_factor": 4.67,
+    "mg90s_headroom_factor": 5.84,
+    "balanced_xy_within_2mm": true
+  }
+}

@@ -1,14 +1,14 @@
 # GemaBot review-plan demo
 
-Stationary desk companion from the review-plan concept renders: about 190 mm tall, 96 mm tapered base, 95×80×75 mm head, 65×49 mm (3.2 in) face, burnt-orange side discs, base light ring, and button, sitting on a 99×99×16 mm clock charging dock. The head still pans and tilts. There are no wheels or legs.
+Stationary desk companion updated to the **fitted 4-part CAD** (`cad/build_chintu_cad.py`): `146.0 mm` tall, `Ø86 mm` tapered base (`50 mm` tall), `Ø32 mm` gimbal ball socket (center at `z = 72.5 mm`), `68×58×46 mm` seamless head (`7 mm` fillet), `47.2×39.2 mm` (`2.06"` `502×410` landscape) AMOLED face, `50×30 mm` top solar crown bumper (`head_touch`), burnt-orange side ear rings, copper base light ring, and shoulder button, sitting directly on the desk. The head still pans (`±80°`) and tilts (`±26°` around the ball center). There are no wheels or legs.
 
-This world reuses `controllers/gemma_bot_controller` unchanged, including the Sarvam voice pipeline. `worlds/gemma_bot.wbt` is not modified.
+This world reuses `controllers/gemma_bot_controller` (including the Emotion Engine and Sarvam voice pipeline). `worlds/gemma_bot.wbt` is not modified.
 
 Open **`worlds/gemabot_review_plan.wbt`** in Webots R2025a.
 
 ## What you should see
 
-- Charcoal two-part head and tapered base, orange tilt-pivot discs, orange base button, and a **GEMA** mark on the base.
+- Charcoal seamless head (`68×58×46 mm`) and tapered base (`Ø86 mm`), burnt-orange side ear rings, copper base light ring, orange shoulder button, `50×30 mm` solar crown (`head_touch`), and a **CHINTU** mark on the base.
 - The face is the live 128×64 OLED: soft light-blue rounded eyes (`#8EC9DB`), a white highlight, and a small smile. A larger `protos/textures/face_screen.png` is the panel's starting texture.
 - The dock clock reads **10:42** (`protos/textures/clock_1042.png`).
 - A desk, laptop, cup, and plant. The camera looks at the robot from the front of the desk.
@@ -85,14 +85,14 @@ Matched in `protos/GemaBotReview.proto`, not by editing the controller:
 
 | Device | Name | Notes |
 | :--- | :--- | :--- |
-| Display | `oled_display` | 128×64 |
-| Camera | `camera` | 160×120, looks out of the face |
-| Pan motor | `head_yaw` | about Z, ±1.4 rad |
-| Tilt motor | `head_pitch` | about X through the head centre, ±0.45 rad |
+| Display | `oled_display` | `502×410` landscape (`2.06"` AMOLED, auto-detected by controller) |
+| Camera | `camera` | 160×120, looks out of the face above the AMOLED |
+| Pan motor | `head_yaw` | about Z, ±1.4 rad (±80°) |
+| Tilt motor | `head_pitch` | about X through the `Ø32 mm` gimbal ball center (`z = 72.5 mm`), ±0.454 rad (±26°) |
 | Sensors | `yaw_sensor`, `pitch_sensor` | present, as in the original world |
-| Touch | `head_touch` | bumper on the crown |
+| Touch | `head_touch` | `50×30 mm` floating solar-panel bumper on the crown |
 
-The robot’s Webots name stays `Gemma-Bot` so the existing controller, status server, and `follow` tooling keep working. The shell graphic says **GEMA**.
+The robot’s Webots name is `Chintu` (`GemaBotReview.proto`), and the curved base graphic says **CHINTU**.
 
 ## Files
 

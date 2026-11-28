@@ -3,17 +3,20 @@
 EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/objects/backgrounds/protos/TexturedBackground.proto"
 EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/objects/backgrounds/protos/TexturedBackgroundLight.proto"
 EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/objects/solids/protos/SolidBox.proto"
+EXTERNPROTO "../protos/GemaBotReview.proto"
+EXTERNPROTO "../protos/GemaClockDock.proto"
 
 WorldInfo {
   info [
-    "Gemma-Bot: An expressive desktop companion robot with animated OLED eyes, a servo head, camera, and touch sensor."
+    "Chintu / Gemma-Bot (fitted CAD): 146 mm tall, Ø86 mm tapered base, Ø32 mm ball-socket gimbal, 68x58x46 mm head, 502x410 2.06\" AMOLED, 50x30 mm solar crown bumper."
   ]
-  title "Gemma-Bot Desktop Companion"
+  title "Gemma-Bot Desktop Companion (Chintu CAD)"
   basicTimeStep 16
 }
 Viewpoint {
-  orientation 0.061059499569659864 -0.07047738381890405 -0.9956428455436946 4.851019190051961
-  position -0.043958764102786124 -0.4381528573564823 0.16178183728373752
+  orientation 0.01624635726508382 -0.01728125654334697 -0.9997186674499472 4.773811574395105
+  position -0.037985365063498394 -0.7674093477970783 0.11427964830367562
+  near 0.02
   follow "Gemma-Bot"
 }
 TexturedBackground {
@@ -32,240 +35,16 @@ SolidBox {
     metalness 0.1
   }
 }
-Robot {
-  children [
-    DEF BASE_SHAPE Pose {
-      translation 0 0 0.035
-      rotation 1 0 0 1.57079632679
-      children [
-        Shape {
-          appearance DEF ORANGE_BODY PBRAppearance {
-            baseColor 0.96 0.42 0.08
-            roughness 0.35
-            metalness 0.05
-          }
-          geometry Cylinder {
-            height 0.07
-            radius 0.048
-          }
-        }
-      ]
-    }
-    Pose {
-      translation 0 0 0.005
-      rotation 1 0 0 1.57079632679
-      children [
-        Shape {
-          appearance PBRAppearance {
-            baseColor 0.15 0.15 0.16
-            roughness 0.5
-          }
-          geometry Cylinder {
-            height 0.01
-            radius 0.05
-          }
-        }
-      ]
-    }
-    HingeJoint {
-      jointParameters HingeJointParameters {
-        position -1.6717433419221797e-08
-        axis 0 0 1
-        anchor 0 0 0.07
-        minStop -1.4
-        maxStop 1.4
-      }
-      device [
-        RotationalMotor {
-          name "head_yaw"
-          maxVelocity 4
-          maxTorque 1.5
-          sound ""
-        }
-        PositionSensor {
-          name "yaw_sensor"
-        }
-      ]
-      endPoint Solid {
-        translation 0 0 0.07
-        children [
-          Pose {
-            translation 0 0 0.015
-            rotation 1 0 0 1.57079632679
-            children [
-              Shape {
-                appearance PBRAppearance {
-                  baseColor 0.2 0.2 0.22
-                  roughness 0.4
-                }
-                geometry Cylinder {
-                  height 0.03
-                  radius 0.024
-                }
-              }
-            ]
-          }
-          HingeJoint {
-            jointParameters HingeJointParameters {
-              position 0.32000002082981327
-              anchor 0 0 0.03
-              minStop -0.45
-              maxStop 0.45
-            }
-            device [
-              RotationalMotor {
-                name "head_pitch"
-                maxVelocity 3.5
-                maxTorque 1.5
-                sound ""
-              }
-              PositionSensor {
-                name "pitch_sensor"
-              }
-            ]
-            endPoint Solid {
-              translation 0 0 0.03
-              rotation 1 0 0 0.3200000208298131
-              children [
-                DEF HEAD_HOUSING Pose {
-                  translation 0 0 0.045
-                  children [
-                    Shape {
-                      appearance USE ORANGE_BODY
-                      geometry Box {
-                        size 0.095 0.08 0.075
-                      }
-                    }
-                  ]
-                }
-                Pose {
-                  translation 0 -0.0405 0.045
-                  children [
-                    Shape {
-                      appearance PBRAppearance {
-                        baseColor 0.02 0.02 0.02
-                        roughness 0.2
-                        metalness 0.1
-                      }
-                      geometry Box {
-                        size 0.09 0.003 0.068
-                      }
-                    }
-                  ]
-                }
-                DEF OLED_DISPLAY Display {
-                  translation 0 -0.0425 0.043
-                  children [
-                    Shape {
-                      appearance PBRAppearance {
-                        baseColorMap ImageTexture {
-                          filtering 0
-                        }
-                        roughness 0.2
-                        metalness 0
-                        emissiveIntensity 0
-                      }
-                      geometry IndexedFaceSet {
-                        coord Coordinate {
-                          point [
-                            -0.038 0 -0.022
-                            0.038 0 -0.022
-                            0.038 0 0.022
-                            -0.038 0 0.022
-                          ]
-                        }
-                        texCoord TextureCoordinate {
-                          point [
-                            0 0
-                            1 0
-                            1 1
-                            0 1
-                          ]
-                        }
-                        coordIndex [
-                          0, 1, 2, 3, -1
-                        ]
-                        texCoordIndex [
-                          0, 1, 2, 3, -1
-                        ]
-                      }
-                    }
-                  ]
-                  name "oled_display"
-                  width 128
-                }
-                Camera {
-                  translation 0 -0.041 0.072
-                  rotation 1 0 0 -1.570796
-                  fieldOfView 1
-                  width 160
-                  height 120
-                }
-                TouchSensor {
-                  translation 0 0 0.085
-                  rotation 1 0 0 1.57079632679
-                  children [
-                    Shape {
-                      appearance PBRAppearance {
-                        baseColor 0.9 0.38 0.06
-                        roughness 0.4
-                      }
-                      geometry Cylinder {
-                        height 0.004
-                        radius 0.022
-                      }
-                    }
-                  ]
-                  name "head_touch"
-                }
-              ]
-              boundingObject Pose {
-                translation 0 0 0.045
-                children [
-                  Box {
-                    size 0.095 0.08 0.075
-                  }
-                ]
-              }
-              physics Physics {
-                density -1
-                mass 0.15
-              }
-              linearVelocity -2.365445164077229e-09 9.111862631271903e-17 -5.698213147477336e-16
-              angularVelocity -3.0426480817714304e-15 5.863609067461172e-14 -1.671742312790367e-07
-            }
-          }
-        ]
-        boundingObject Pose {
-          translation 0 0 0.015
-          rotation 1 0 0 1.57079632679
-          children [
-            Cylinder {
-              height 0.03
-              radius 0.024
-            }
-          ]
-        }
-        physics Physics {
-          density -1
-          mass 0.05
-        }
-        linearVelocity 4.932988999091312e-13 2.2745259233391058e-17 1.7763790837667463e-16
-        angularVelocity -3.3284148345851474e-15 3.825745282269037e-14 -1.6717428280075356e-07
-      }
-    }
-  ]
-  name "Gemma-Bot"
-  boundingObject Pose {
-    translation 0 0 0.035
-    rotation 1 0 0 1.57079632679
-    children [
-      Cylinder {
-        height 0.07
-        radius 0.048
-      }
-    ]
-  }
-  controller "gemma_bot_controller"
-  supervisor TRUE
+GemaClockDock {
+}
+GemaBotReview {
+  hidden position_0_0 0.05259930546266288
+  hidden rotation_1 0 0 1 0.0525993054626596
+  hidden position_1_0 -0.12000000474061487
+  hidden linearVelocity_1 -2.646949519217129e-08 -2.0682610374658054e-09 1.5543137391835447e-16
+  hidden angularVelocity_1 1.4580529906524973e-10 -2.887206695463906e-09 0.1694933786781716
+  hidden rotation_2 -1 0 0 0.1200000047406161
+  hidden linearVelocity_2 -0.0009017094249772122 -5.542136551978162e-05 2.397962921341066e-13
+  hidden angularVelocity_2 2.5873994690290655e-10 -4.11404729621266e-09 0.1694933816167597
+  translation 0 0 0.013
 }

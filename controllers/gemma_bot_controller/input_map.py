@@ -79,7 +79,10 @@ def apply_key_action(bot, action: KeyAction) -> None:
     if action.cycle_theme:
         bot.cycle_screen_theme()
     if action.mood is not None:
-        bot.mood = action.mood
+        if hasattr(bot, "set_mood"):
+            bot.set_mood(action.mood, instant=False, play_chirp=True)
+        else:
+            bot.mood = action.mood
     if action.gesture is not None:
         bot.trigger_gesture(action.gesture)
     if action.yaw_delta:

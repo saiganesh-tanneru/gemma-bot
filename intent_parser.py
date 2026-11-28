@@ -8,24 +8,41 @@ import asyncio
 import json
 import logging
 import re
+import sys
+from pathlib import Path
 from typing import Any, Dict, Optional
 import urllib.request
 
 import config
 
+_CONTROLLER_DIR = str(Path(__file__).resolve().parent / "controllers" / "gemma_bot_controller")
+if _CONTROLLER_DIR not in sys.path:
+    sys.path.insert(0, _CONTROLLER_DIR)
+
+try:
+    from emotion_engine.presets import ALL_MOODS as _ENGINE_MOODS
+    from gestures import GESTURES as _ENGINE_GESTURES
+except Exception:
+    _ENGINE_MOODS = frozenset({
+        "NEUTRAL", "HAPPY", "LOVE", "WINK", "COOL", "STAR_EYES",
+        "PLEADING", "CRYING", "TONGUE", "SMIRK", "DIZZY", "THINKING",
+        "SLEEPY", "SURPRISED", "ANGRY",
+    })
+    _ENGINE_GESTURES = {}
+
 logger = logging.getLogger("gemma_intent_parser")
 
 ALLOWED_ACTIONS = frozenset({"express", "move", "speak", "theme", "interrupt", "none"})
-ALLOWED_MOODS = frozenset({
-    "NEUTRAL", "HAPPY", "LOVE", "WINK", "COOL", "STAR_EYES",
-    "PLEADING", "CRYING", "TONGUE", "SMIRK", "DIZZY", "THINKING",
-    "SLEEPY", "SURPRISED", "ANGRY",
-})
-ALLOWED_GESTURES = frozenset({
-    "nod", "shake", "wiggle", "curious", "tilt_left", "tilt_right",
-    "perk_up", "droop", "bounce", "groove", "shiver", "scan",
-    "confused", "bow", "cheer", "yawn", "shy", "peek_a_boo", "dizzy_spin",
-})
+ALLOWED_MOODS = _ENGINE_MOODS
+ALLOWED_GESTURES = (
+    frozenset(_ENGINE_GESTURES.keys())
+    if _ENGINE_GESTURES
+    else frozenset({
+        "nod", "shake", "wiggle", "curious", "tilt_left", "tilt_right",
+        "perk_up", "droop", "bounce", "groove", "shiver", "scan",
+        "confused", "bow", "cheer", "yawn", "shy", "peek_a_boo", "dizzy_spin",
+    })
+)
 ALLOWED_SCREENS = frozenset({"CYAN", "GREEN", "AMBER", "BLUE", "PURPLE", "WHITE"})
 ALLOWED_GAZES = frozenset({"left", "right", "up", "down", "center"})
 ALLOWED_KEYS = frozenset({"action", "gesture", "mood", "screen", "gaze", "speech"})
@@ -119,6 +136,11 @@ MOOD_RULES = [
     (["sleep", "tired", "goodnight", "nap", "😴"], {"mood": "SLEEPY", "speech": "Goodnight... Zzz"}),
     (["angry", "mad", "grumpy", "furious", "😡"], {"mood": "ANGRY", "speech": "Hmph!"}),
     (["think", "ponder", "calculate", "why", "🤔"], {"mood": "THINKING", "speech": "Hmm, let me think..."}),
+    (["bored", "boredom"], {"mood": "BORED", "gesture": "yawn", "speech": "Hmm... getting a little bored."}),
+    (["sulking", "sulk", "pout"], {"mood": "SULKING", "gesture": "shy", "speech": "Hmph... fine."}),
+    (["worried", "concerned", "😟"], {"mood": "WORRIED", "gesture": "shiver", "speech": "Oh dear, are you okay?"}),
+    (["skeptic", "doubtful", "🤨"], {"mood": "SKEPTIC", "gesture": "curious", "speech": "Really now?"}),
+    (["awe", "amazed"], {"mood": "AWE", "gesture": "perk_up", "speech": "Whoa!"}),
     (["neutral", "calm", "😐"], {"mood": "NEUTRAL"}),
     (["hello", "hi", "hey"], {"mood": "HAPPY", "gesture": "nod", "speech": "Hello! I am Gemma-Bot!"}),
 ]
@@ -215,10 +237,8 @@ class SarvamIntentProvider(IntentProvider):
         "You translate English, Telugu, or Tanglish user requests for a desktop companion robot "
         "(Gemma-Bot) into a single JSON object. "
         "Allowed action: express, move, speak, theme, interrupt, none. "
-        "Allowed moods: NEUTRAL, HAPPY, LOVE, WINK, COOL, STAR_EYES, PLEADING, CRYING, "
-        "TONGUE, SMIRK, DIZZY, THINKING, SLEEPY, SURPRISED, ANGRY. "
-        "Allowed gestures: nod, shake, wiggle, curious, tilt_left, tilt_right, perk_up, "
-        "droop, bounce, groove, shiver, scan, confused, bow, cheer, yawn, shy, peek_a_boo, dizzy_spin. "
+        f"Allowed moods: {', '.join(sorted(ALLOWED_MOODS))}. "
+        f"Allowed gestures: {', '.join(sorted(ALLOWED_GESTURES))}. "
         "Allowed screen: CYAN, GREEN, AMBER, BLUE, PURPLE, WHITE. "
         "Allowed gaze: left, right, up, down, center. "
         "Reply ONLY with JSON."
