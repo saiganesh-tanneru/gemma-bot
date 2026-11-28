@@ -272,6 +272,23 @@ class LocalWakeWordDetector:
         r"\b(?:ring\s+alarm|trigger\s+alarm|alarm)\b",
         re.IGNORECASE,
     )
+    _WEATHER_CLEAR_RE = re.compile(
+        r"\b(?:clear\s+weather|stop\s+weather|hide\s+weather|weather\s+off)\b",
+        re.IGNORECASE,
+    )
+    _WEATHER_LIVE_RE = re.compile(
+        r"\b(?:what(?:'s|\s+is)\s+the\s+weather|check\s+(?:the\s+)?weather|how(?:'s|\s+is)\s+the\s+weather|weather\s+(?:in|for|at)|forecast\s+(?:in|for|at))\b(?:\s+(?:in|for|at))?\s*([a-zA-Z\s,'-]{2,40})?",
+        re.IGNORECASE,
+    )
+    _WEATHER_PRESET_PATTERNS: Tuple[Tuple[re.Pattern, str], ...] = (
+        (re.compile(r"\b(?:thunderstorm|thunder|lightning|stormy|storm)\b", re.IGNORECASE), "storm"),
+        (re.compile(r"\b(?:make\s+it\s+rain|rainy|raining|rain\s+weather|drizzle)\b", re.IGNORECASE), "rainy"),
+        (re.compile(r"\b(?:make\s+it\s+snow|snowy|snowing|snowfall|blizzard)\b", re.IGNORECASE), "snowy"),
+        (re.compile(r"\b(?:windy|gusty|breezy|wind\s+weather)\b", re.IGNORECASE), "windy"),
+        (re.compile(r"\b(?:starry\s+night|stargaze|clear\s+night|moonlight)\b", re.IGNORECASE), "starry"),
+        (re.compile(r"\b(?:cloudy|overcast|cloud\s+weather)\b", re.IGNORECASE), "cloudy"),
+        (re.compile(r"\b(?:sunny|sunshine|make\s+it\s+sunny)\b", re.IGNORECASE), "sunny"),
+    )
 
     @classmethod
     def extract_alarm_delay_s(cls, phrase: str) -> Optional[float]:
@@ -280,6 +297,27 @@ class LocalWakeWordDetector:
         m = cls._ALARM_SET_RE.search(" ".join(str(phrase).strip().split()))
         if m:
             return max(0.5, float(m.group(1)))
+        return None
+
+    @classmethod
+    def extract_weather_city(cls, phrase: str) -> Optional[str]:
+        if not phrase:
+            return None
+        text = " ".join(str(phrase).strip().split())
+        m = re.search(r"\b(?:weather|forecast)\s+(?:in|for|at)\s+([a-zA-Z\s,'-]+?)[?!.,]*$", text, re.IGNORECASE)
+        if m:
+            city = m.group(1).strip(" ?!.,")
+            return city if len(city) >= 2 else None
+        return None
+
+    @classmethod
+    def extract_weather_preset(cls, phrase: str) -> Optional[str]:
+        if not phrase:
+            return None
+        text = " ".join(str(phrase).strip().split())
+        for pattern, condition in cls._WEATHER_PRESET_PATTERNS:
+            if pattern.search(text):
+                return condition
         return None
 
     @classmethod
@@ -301,4 +339,10 @@ class LocalWakeWordDetector:
             return "set_alarm"
         if cls._ALARM_RING_RE.search(text):
             return "ring_alarm"
+        if cls._WEATHER_CLEAR_RE.search(text):
+            return "weather_clear"
+        if cls._WEATHER_LIVE_RE.search(text) or re.fullmatch(r"weather", text, re.IGNORECASE):
+            return "weather_live"
+        if cls.extract_weather_preset(text) is not None:
+            return "weather_preset"
         return None

@@ -146,6 +146,27 @@
       </div>
 
       <div class="card">
+        <div style="font-size:13px;font-weight:600;margin-bottom:8px;">Weather &amp; Atmosphere (Live Open-Meteo + Creative Shows)</div>
+        <div class="row">
+          <input id="weatherCityInput" type="text" value="New York" placeholder="Enter city (e.g. Tokyo, Hyderabad, London)" />
+          <button type="button" class="primary" onclick="fetchLiveWeather()">Live Weather</button>
+          <button type="button" id="wxAmbientBtn" onclick="toggleWeatherAmbient()">Ambient: ON</button>
+          <button type="button" id="wxUnitBtn" onclick="toggleWeatherUnit()">Unit: °C</button>
+          <button type="button" onclick="sendCmd({weather_clear:true})">Clear</button>
+        </div>
+        <div class="row">
+          <button onclick="sendCmd({weather:'sunny'})">☀️ Sunny</button>
+          <button onclick="sendCmd({weather:'cloudy'})">☁️ Cloudy</button>
+          <button onclick="sendCmd({weather:'rainy'})">🌧️ Rainy</button>
+          <button onclick="sendCmd({weather:'storm'})">⛈️ Storm</button>
+          <button onclick="sendCmd({weather:'snowy'})">❄️ Snowy</button>
+          <button onclick="sendCmd({weather:'windy'})">💨 Windy</button>
+          <button onclick="sendCmd({weather:'starry'})">🌙 Starry</button>
+        </div>
+        <div id="weatherMeta" class="sub" style="margin:0;">Weather: Off — pick a creative atmosphere or fetch live Open-Meteo weather.</div>
+      </div>
+
+      <div class="card">
         <div style="font-size:13px;font-weight:600;margin-bottom:8px;">7 Storyboard States (Frame-for-Frame)</div>
         <div class="row">
           <button onclick="previewState('sleep')">1. Sleep</button>
@@ -187,6 +208,8 @@
 
     let charging = false;
     let docked = true;
+    let wxAmbient = true;
+    let wxUnit = 'C';
     let previewMode = null;
     let lastWakeCount = 0;
     let lastState = '';
@@ -220,24 +243,290 @@
       ctx.fill();
     }
 
+    const PIXEL_FONT_3X5 = {
+      '0':['111','101','101','101','111'],'1':['010','110','010','010','111'],
+      '2':['111','001','111','100','111'],'3':['111','001','111','001','111'],
+      '4':['101','101','111','001','001'],'5':['111','100','111','001','111'],
+      '6':['111','100','111','101','111'],'7':['111','001','001','010','010'],
+      '8':['111','101','111','101','111'],'9':['111','101','111','001','111'],
+      '-':['000','000','111','000','000'],'C':['111','100','100','100','111'],
+      'F':['111','100','110','100','100'],' ':['000','000','000','000','000'],
+    };
+
+    function drawPixelTextScreen(x, y, text, ps, color) {
+      let cx = x;
+      ctx.fillStyle = color;
+      for (const ch of String(text || '').toUpperCase()) {
+        if ((ch === 'C' || ch === 'F') && cx > x) {
+          ctx.fillRect(cx, y, ps * 0.9, ps * 0.9);
+          cx += ps * 1.6;
+        }
+        const g = PIXEL_FONT_3X5[ch];
+        if (g) {
+          for (let r = 0; r < g.length; r++) {
+            for (let c = 0; c < g[r].length; c++) {
+              if (g[r][c] === '1') ctx.fillRect(cx + c * ps, y + r * ps, ps, ps);
+            }
+          }
+          cx += ps * 4.0;
+        }
+      }
+    }
+
+    function drawPixelHeart(cx, cy, alpha, b) {
+      if (alpha <= 0.05) return;
+      ctx.fillStyle = rgbHex(0xFF5C8A, b * alpha);
+      ctx.fillRect(sx(cx - 4), sy(cy - 2.5), sw(3.2), sw(3));
+      ctx.fillRect(sx(cx + 0.8), sy(cy - 2.5), sw(3.2), sw(3));
+      ctx.fillRect(sx(cx - 5), sy(cy - 0.5), sw(10), sw(2.8));
+      ctx.fillRect(sx(cx - 3.8), sy(cy + 2), sw(7.6), sw(2.2));
+      ctx.fillRect(sx(cx - 2.2), sy(cy + 4), sw(4.4), sw(1.8));
+      ctx.fillRect(sx(cx - 0.9), sy(cy + 5.6), sw(1.8), sw(1.3));
+    }
+
+    function drawPixelCloud(cx, cy, sc, hex, b) {
+      ctx.fillStyle = rgbHex(hex, b);
+      ctx.fillRect(sx(cx - 5 * sc), sy(cy - 1.5 * sc), sw(10 * sc), sw(3 * sc));
+      ctx.fillRect(sx(cx - 3.5 * sc), sy(cy - 3.2 * sc), sw(4.5 * sc), sw(2.5 * sc));
+      ctx.fillRect(sx(cx + 0.2 * sc), sy(cy - 2.6 * sc), sw(3.5 * sc), sw(2 * sc));
+    }
+
+    function drawWeatherBackdrop(f) {
+      const cond = f.weather_condition;
+      const inten = Math.max(0, Math.min(1, f.weather_intensity || 0));
+      if (!cond || inten <= 0.02) return;
+      const t = f.weather_phase || 0;
+      const b = (f.brightness ?? 1.0) * inten;
+
+      if (cond === 'sunny') {
+        const sx0 = 14, sy0 = 12, pulse = 1 + 0.08 * Math.sin(t * 3);
+        drawOvalDesign(sx0, sy0, 9 * pulse, 9 * pulse, rgbHex(0xFFD95A, b));
+        drawOvalDesign(sx0, sy0, 5.2, 5.2, rgbHex(0xFFFFFF, b * 0.85));
+        ctx.fillStyle = rgbHex(0xFFA94D, b);
+        for (let k = 0; k < 8; k++) {
+          const ang = k * (Math.PI / 4) + t * 0.9;
+          ctx.fillRect(sx(sx0 + Math.cos(ang) * 7.2 - 0.9), sy(sy0 + Math.sin(ang) * 7.2 - 0.9), sw(1.8), sw(1.8));
+        }
+        for (let i = 0; i < 5; i++) {
+          const tw = 0.35 + 0.65 * Math.abs(Math.sin(t * 2.2 + i * 1.1));
+          ctx.fillStyle = rgbHex(0xFFD95A, b * tw);
+          ctx.fillRect(55 + i * 78, 70 + 20 * Math.sin(t * 1.4 + i), 4, 4);
+        }
+      } else if (cond === 'cloudy') {
+        drawPixelCloud(((t * 5) % 150) - 11, 8, 1.15, 0xA8C8DC, b * 0.9);
+        drawPixelCloud(((t * 3.2 + 75) % 150) - 11, 12, 0.9, 0x6D8FA3, b * 0.8);
+      } else if (cond === 'rainy' || cond === 'storm') {
+        if (cond === 'storm') {
+          const fl = Math.max(0, Math.min(1, f.weather_flash || 0));
+          // Subtle sky flash glow in upper AMOLED when lightning strikes
+          if (fl > 0.08) {
+            const skyGrad = ctx.createRadialGradient(205, 80, 10, 205, 110, 240);
+            skyGrad.addColorStop(0, `rgba(186, 230, 253, ${0.22 * fl})`);
+            skyGrad.addColorStop(1, 'rgba(0, 0, 0, 0)');
+            ctx.fillStyle = skyGrad;
+            ctx.fillRect(0, 0, 410, 320);
+          }
+          // Smooth layered storm clouds in upper AMOLED sky
+          const cLit = fl > 0.2 ? 0xCBD5E1 : 0x475569;
+          const cEdge = fl > 0.2 ? 0x94A3B8 : 0x334155;
+          const drawStormCloud = (cx0, cy0, sc) => {
+            drawOvalDesign(cx0 - 6 * sc, cy0 + 1 * sc, 11 * sc, 7 * sc, rgbHex(cEdge, b * 0.92));
+            drawOvalDesign(cx0 + 6 * sc, cy0 + 1.5 * sc, 10 * sc, 6.5 * sc, rgbHex(cEdge, b * 0.92));
+            drawOvalDesign(cx0, cy0 - 1.5 * sc, 13 * sc, 8.5 * sc, rgbHex(cLit, b * 0.95));
+            drawRoundRectDesign(cx0 - 9 * sc, cy0 + 1 * sc, 18 * sc, 4.2 * sc, 2 * sc, rgbHex(cLit, b * 0.95));
+          };
+          drawStormCloud(28 + Math.sin(t * 0.6) * 2, -6, 1.45);
+          drawStormCloud(98 - Math.sin(t * 0.5) * 2, -5, 1.35);
+          drawStormCloud(64 + Math.cos(t * 0.4) * 1.5, -9, 1.25);
+        } else {
+          drawPixelCloud(22 + Math.sin(t * 0.6) * 2, 8, 1.2, 0xA8C8DC, b * 0.9);
+          drawPixelCloud(106 - Math.sin(t * 0.5) * 2, 9, 1.05, 0xA8C8DC, b * 0.85);
+        }
+        const numDrops = cond === 'storm' ? 16 : 12;
+        const speed = cond === 'storm' ? 54 : 38;
+        for (let i = 0; i < numDrops; i++) {
+          let lane = (i * 19 + 7) % 124;
+          if (lane > 28 && lane < 100 && (i % 3 !== 0)) lane = (lane + 42) % 124;
+          const dy = (t * speed + i * 11.3) % 64;
+          const dx = (lane + dy * (cond === 'storm' ? 0.25 : 0.10)) % 126;
+          if (cond === 'rainy' && (f.umbrella_alpha || 0) > 0.35 && dx >= 16 && dx <= 108) {
+            const uArc = (dx - 64) / 44;
+            const domeY = -4 + 14 * uArc * uArc;
+            if (dy > domeY) {
+              if (dy < domeY + 10) {
+                ctx.fillStyle = rgbHex(0xFFFFFF, b * 0.85);
+                ctx.fillRect(sx(dx - 1.2), sy(domeY - 1.5), sw(2.6), sw(1.4));
+              }
+              continue;
+            }
+          }
+          ctx.fillStyle = rgbHex(i % 2 === 0 ? 0xA8ECFF : 0x44AAFF, b * 0.85);
+          ctx.fillRect(sx(dx), sy(dy), sw(1.3), sw(cond === 'storm' ? 4.0 : 3.2));
+          if (dy > 58) {
+            ctx.fillStyle = rgbHex(0xA8ECFF, b * 0.7);
+            ctx.fillRect(sx(dx - 1.5), sy(62), sw(4), sw(1.2));
+          }
+        }
+        for (let i = 0; i < 10; i++) {
+          const rx = (i * 43 + 15) % 410;
+          const ry = (t * 210 + i * 61) % 502;
+          if (ry < BAND_Y - 12 || ry > BAND_Y + DESIGN_H * SCALE + 4) {
+            ctx.fillStyle = rgbHex(0x44AAFF, b * 0.65);
+            ctx.fillRect(rx, ry, 2, 10);
+          }
+        }
+        if (cond === 'storm' && (f.weather_flash || 0) > 0.08) {
+          const fb = (f.brightness ?? 1.0) * Math.min(1, f.weather_flash);
+          // Crisp tapered vector lightning bolts striking out of the storm clouds
+          const bolts = [
+            // Bolt 0: Right sky strike
+            [[104, -2], [95, 11], [103, 11], [91, 26], [96, 14], [89, 14], [98, -2]],
+            // Bolt 1: Left sky strike
+            [[22, -3], [31, 10], [23, 10], [33, 25], [27, 13], [35, 13], [28, -3]],
+            // Bolt 2: Upper center-right tall strike
+            [[78, -6], [69, 6], [76, 6], [65, 19], [71, 9], [64, 9], [72, -6]],
+          ];
+          const pts = bolts[Math.abs(f.weather_bolt || 0) % bolts.length];
+          ctx.save();
+          ctx.shadowColor = rgbHex(0xFACC15, fb);
+          ctx.shadowBlur = 16 * fb;
+          ctx.fillStyle = rgbHex(0xFDE047, fb);
+          ctx.beginPath();
+          pts.forEach(([px, py], idx) => idx === 0 ? ctx.moveTo(sx(px), sy(py)) : ctx.lineTo(sx(px), sy(py)));
+          ctx.closePath();
+          ctx.fill();
+          // Razor-sharp white-hot inner core
+          ctx.shadowBlur = 0;
+          ctx.fillStyle = rgbHex(0xFFFFFF, fb);
+          ctx.beginPath();
+          const cxB = pts.reduce((a, p) => a + p[0], 0) / pts.length;
+          const cyB = pts.reduce((a, p) => a + p[1], 0) / pts.length;
+          pts.forEach(([px, py], idx) => {
+            const ix = cxB + (px - cxB) * 0.52;
+            const iy = cyB + (py - cyB) * 0.72;
+            if (idx === 0) ctx.moveTo(sx(ix), sy(iy));
+            else ctx.lineTo(sx(ix), sy(iy));
+          });
+          ctx.closePath();
+          ctx.fill();
+          ctx.restore();
+        }
+      } else if (cond === 'snowy') {
+        for (let i = 0; i < 16; i++) {
+          const fx = ((i * 17 + 5) % 124 + Math.sin(t * 1.8 + i) * 4.5 + 126) % 126;
+          const fy = (t * (10 + (i % 3) * 3) + i * 9.7) % 63;
+          if (i % 3 === 0) {
+            ctx.fillStyle = rgbHex(0xFFFFFF, b * 0.9);
+            ctx.fillRect(sx(fx - 1.2), sy(fy), sw(3.4), sw(1));
+            ctx.fillRect(sx(fx), sy(fy - 1.2), sw(1), sw(3.4));
+          } else {
+            ctx.fillStyle = rgbHex(0xA8ECFF, b * 0.85);
+            ctx.fillRect(sx(fx), sy(fy), sw(1.6), sw(1.6));
+          }
+        }
+        for (let i = 0; i < 14; i++) {
+          const fx = ((i * 37 + 19) + Math.sin(t * 1.4 + i) * 14 + 410) % 410;
+          const fy = (t * (45 + (i % 3) * 12) + i * 47) % 502;
+          if (fy < BAND_Y - 8 || fy > BAND_Y + DESIGN_H * SCALE + 4) {
+            ctx.fillStyle = rgbHex(0xFFFFFF, b * 0.8);
+            ctx.fillRect(fx, fy, 4, 4);
+          }
+        }
+      } else if (cond === 'windy') {
+        for (let i = 0; i < 6; i++) {
+          const wy = 7 + i * 10.5;
+          const wx = ((t * (70 + i * 8) + i * 28) % 156) - 20;
+          const wlen = 12 + (i % 3) * 5;
+          ctx.fillStyle = rgbHex(i % 2 === 0 ? 0xA8ECFF : 0x4CE894, b * 0.75);
+          ctx.fillRect(sx(wx), sy(wy), sw(wlen), sw(1.3));
+          ctx.fillRect(sx(wx + wlen - 3), sy(wy - 1.6), sw(3), sw(1.3));
+        }
+        for (let i = 0; i < 4; i++) {
+          const lx = ((t * 62 + i * 35) % 146) - 10;
+          const ly = 14 + i * 12 + Math.sin(t * 5 + i) * 4;
+          ctx.fillStyle = rgbHex(i % 2 === 0 ? 0xFF8A5B : 0xFFD95A, b * 0.95);
+          ctx.fillRect(sx(lx), sy(ly), sw(2.8), sw(1.8));
+        }
+      } else if (cond === 'starry') {
+        drawOvalDesign(15, 11, 8.5, 8.5, rgbHex(0xFFD95A, b * 0.95));
+        drawOvalDesign(17.4, 9.8, 6.8, 6.8, '#000000');
+        const stars = [[34,8],[64,6],[96,9],[116,15],[12,48],[118,52],[52,57],[80,56]];
+        stars.forEach(([sx0, sy0], idx) => {
+          const tw = 0.25 + 0.75 * Math.abs(Math.sin(t * 2.1 + idx * 0.9));
+          ctx.fillStyle = rgbHex(idx % 2 === 0 ? 0xFFFFFF : 0xFFD95A, b * tw);
+          ctx.fillRect(sx(sx0), sy(sy0), sw(1.6), sw(1.6));
+        });
+        for (let idx = 0; idx < 12; idx++) {
+          const sx0 = (idx * 39 + 24) % 400;
+          const sy0 = idx < 6 ? 44 + ((idx * 53) % 90) : 502 - 120 + ((idx * 17) % 95);
+          const tw = 0.25 + 0.75 * Math.abs(Math.sin(t * 1.9 + idx * 1.3));
+          ctx.fillStyle = rgbHex(idx % 3 === 0 ? 0xFFD95A : 0xFFFFFF, b * tw);
+          ctx.fillRect(sx0, sy0, 3, 3);
+        }
+      }
+    }
+
+    function drawWeatherBadge(f) {
+      if (!f.weather_temp_label || (f.bell_alpha || 0) > 0.05) return;
+      const cond = f.weather_condition;
+      const b = Math.max(0.55, f.brightness ?? 1.0) * Math.min(1, 0.55 + 0.45 * (f.weather_intensity || 0.5));
+      const bx = 18, by = 18;
+      if (cond === 'sunny') {
+        ctx.fillStyle = rgbHex(0xFFD95A, b);
+        ctx.fillRect(bx, by + 2, 10, 10);
+        ctx.fillRect(bx + 3, by - 1, 4, 16);
+        ctx.fillRect(bx - 3, by + 5, 16, 4);
+      } else if (cond === 'starry') {
+        ctx.fillStyle = rgbHex(0xFFD95A, b);
+        ctx.fillRect(bx + 2, by + 1, 8, 10);
+        ctx.fillStyle = '#000000';
+        ctx.fillRect(bx + 5, by + 3, 6, 6);
+      } else if (cond === 'storm') {
+        ctx.fillStyle = rgbHex(0x6D8FA3, b);
+        ctx.fillRect(bx, by + 2, 12, 5);
+        ctx.fillStyle = rgbHex(0xFFD95A, b);
+        ctx.fillRect(bx + 5, by + 7, 3, 4);
+        ctx.fillRect(bx + 3, by + 10, 3, 4);
+      } else if (cond === 'snowy') {
+        ctx.fillStyle = rgbHex(0xFFFFFF, b);
+        ctx.fillRect(bx + 4, by + 1, 2, 12);
+        ctx.fillRect(bx - 1, by + 6, 12, 2);
+      } else if (cond === 'windy') {
+        ctx.fillStyle = rgbHex(0xA8ECFF, b);
+        ctx.fillRect(bx, by + 3, 11, 2);
+        ctx.fillStyle = rgbHex(0x4CE894, b);
+        ctx.fillRect(bx + 2, by + 8, 10, 2);
+      } else {
+        ctx.fillStyle = rgbHex(0xA8C8DC, b);
+        ctx.fillRect(bx, by + 4, 12, 5);
+        ctx.fillRect(bx + 3, by + 1, 6, 4);
+      }
+      drawPixelTextScreen(bx + 20, by + 2, f.weather_temp_label, 2.5, rgbHex(0xA8ECFF, b));
+    }
+
     function drawFrame(f) {
       ctx.fillStyle = '#000000';
       ctx.fillRect(0, 0, 410, 502);
+
+      if (f.weather_condition && (f.weather_intensity || 0) > 0.02) {
+        drawWeatherBackdrop(f);
+      }
 
       const b = f.brightness ?? 1.0;
       const gx = Math.max(-1, Math.min(1, f.gaze_x || 0)) * 7.0;
       const gy = Math.max(-1, Math.min(1, f.gaze_y || 0)) * 4.5;
       const bx = f.face_bob_x || 0;
       const by = f.face_bob_y || 0;
-      const lcx = 40 + gx + bx, rcx = 88 + gx + bx, ecy = 28 + gy + by;
-      const mcx = 64 + gx * 0.4 + bx, mcy = 28 + gy * 0.5 + by;
+      const fsc = Math.max(0.6, Math.min(1.15, f.face_scale ?? 1.0));
+      const lcx = 64 - 24 * fsc + gx + bx, rcx = 64 + 24 * fsc + gx + bx, ecy = 28 + gy + by;
+      const mcx = 64 + gx * 0.4 + bx, mcy = 28 + gy * 0.5 + by - (1 - fsc) * 10;
       const blink = f.blink_progress || 0;
 
       const drawEye = (cx, cy, openAmt, isLeft) => {
         const op = Math.max(0, Math.min(1, openAmt)) * Math.max(0, 1 - blink);
-        const ew = Math.min(26, 24 * (f.eye_scale || 1));
-        const eh = Math.min(22, 21 * (f.eye_scale || 1));
-        if (f.happy_arcs) {
+        const ew = Math.min(26, 24 * (f.eye_scale || 1) * fsc);
+        const eh = Math.min(22, 21 * (f.eye_scale || 1) * fsc);
+        if (f.happy_arcs || (f.mood === 'HAPPY' && f.face_mode === 'found_you')) {
           ctx.fillStyle = rgbHex(0xA8ECFF, b);
           for (let i = -12; i <= 12; i++) {
             const u = i / 12;
@@ -262,6 +551,32 @@
           ctx.fillRect(sx(cx - 1.1), sy(cy - 1.1), sw(2.2), sw(2.2));
           return;
         }
+        if (f.mood === 'COOL') {
+          drawRoundRectDesign(cx - ew * 0.5, cy - eh * 0.35, ew, eh * 0.65, 3, rgbHex(0x8EC9DB, b));
+          ctx.fillStyle = rgbHex(0xFFFFFF, b);
+          ctx.fillRect(sx(cx - ew * 0.25), sy(cy - eh * 0.25), sw(2.5), sw(eh * 0.45));
+          return;
+        }
+        if (f.mood === 'LOVE') {
+          drawPixelHeart(cx, cy - 1, 1, b);
+          return;
+        }
+        if (f.mood === 'WINK' && !isLeft) {
+          ctx.fillStyle = rgbHex(0xA8ECFF, b);
+          for (let i = -12; i <= 12; i++) {
+            const u = i / 12;
+            ctx.fillRect(sx(cx + u * ew * 0.46 - 1.4), sy(cy - 4 + u*u*7.5 - 1.2), sw(2.8), sw(2.6));
+          }
+          return;
+        }
+        if (f.mood === 'SMIRK' && !isLeft) {
+          ctx.fillStyle = rgbHex(0x8EC9DB, b);
+          for (let i = -10; i <= 10; i++) {
+            const u = i / 10;
+            ctx.fillRect(sx(cx + u * ew * 0.46 - 1.2), sy(cy + 3.5 - u*u*3 - 1), sw(2.4), sw(2.2));
+          }
+          return;
+        }
         if (op <= 0.06) {
           if (f.face_mode === 'sleep') {
             ctx.fillStyle = rgbHex(0x8EC9DB, b);
@@ -277,6 +592,14 @@
         const curH = Math.max(2.8, eh * op);
         const r = Math.min(7, ew * 0.35, curH * 0.45);
         drawRoundRectDesign(cx - ew / 2, cy - curH / 2, ew, curH, r, rgbHex(0x8EC9DB, b));
+        if (f.mood === 'ANGRY') {
+          ctx.fillStyle = '#000000';
+          ctx.fillRect(sx(isLeft ? cx : cx - ew * 0.52), sy(cy - curH * 0.5), sw(ew * 0.52), sw(curH * 0.38));
+        } else if (f.mood === 'CRYING') {
+          const tearY = cy + curH * 0.5 + 2 + (((f.dizzy_phase || 0) * 4) % 5);
+          ctx.fillStyle = rgbHex(0x44AAFF, b);
+          ctx.fillRect(sx(cx - 2), sy(tearY), sw(4), sw(4));
+        }
         if (op >= 0.45) {
           const hl = f.mood === 'PLEADING' ? 4.4 : ((f.sparkles || 0) > 0.1 ? 4.2 : 3.2);
           drawRoundRectDesign(cx - ew * 0.28, cy - curH * 0.3, hl, hl, 1, rgbHex(0xFFFFFF, b));
@@ -358,6 +681,10 @@
         drawRoundRectDesign(mcx - 3.5, mcy + 16, 7, 2, 1, rgbHex(0x8EC9DB, b));
       } else if (f.mood === 'SURPRISED') {
         drawOvalDesign(mcx, mcy + 16, 7, 7, rgbHex(0x8EC9DB, b));
+      } else if (f.mood === 'TONGUE') {
+        ctx.fillStyle = rgbHex(0x8EC9DB, b);
+        ctx.fillRect(sx(mcx - 5.5), sy(mcy + 15), sw(11), sw(2.2));
+        drawRoundRectDesign(mcx - 3, mcy + 16.8, 6, 5.5, 2.5, rgbHex(0xFF5C8A, b));
       } else if (f.mood === 'DIZZY') {
         ctx.fillStyle = rgbHex(0x8EC9DB, b);
         for (let i = -6; i <= 6; i++) {
@@ -390,15 +717,167 @@
         ctx.fillRect(sx(zx), sy(zy + zs - t), sw(zs), sw(t));
       }
 
+      if ((f.jacket_alpha || 0) > 0.04) {
+        const p = Math.max(0, Math.min(1, f.jacket_alpha));
+        const slide = 1 - Math.pow(1 - Math.min(1, p * 1.4), 3);
+        const phase = f.weather_phase || 0;
+        const bobY = Math.sin(phase * 3) * 0.7 * p;
+        const topY = 88 - 37 * slide + bobY;
+        const coatCol = rgbHex(0xE11D48, b);
+        const coatSeam = rgbHex(0x9F1239, b);
+        const furCol = rgbHex(0xF8FAFC, b);
+        const scarfCol = rgbHex(0x38BDF8, b);
+
+        // Parka sleeves + cozy white mittens tucked at chest
+        drawRoundRectDesign(14, topY + 4, 20, 26, 8, coatCol);
+        drawRoundRectDesign(94, topY + 4, 20, 26, 8, coatCol);
+        drawOvalDesign(33, topY + 21, 11, 9, furCol);
+        drawOvalDesign(95, topY + 21, 11, 9, furCol);
+
+        // Quilted puffer parka torso
+        drawRoundRectDesign(22, topY, 84, 34, 10, coatCol);
+        ctx.fillStyle = coatSeam;
+        for (const ry of [topY + 10, topY + 20, topY + 29]) {
+          ctx.fillRect(sx(25), sy(ry), sw(78), sw(1.6));
+        }
+
+        // Animated gold zipper rising up the center track
+        const zipProg = Math.max(0, Math.min(1, (p - 0.18) / 0.68));
+        ctx.fillStyle = rgbHex(0x334155, b);
+        ctx.fillRect(sx(63), sy(topY + 2), sw(2), sw(30));
+        const zipY = (topY + 28) - 24 * zipProg;
+        ctx.fillStyle = rgbHex(0xFFD95A, b);
+        ctx.fillRect(sx(63.2), sy(zipY), sw(1.6), sw((topY + 31) - zipY));
+        drawRoundRectDesign(61.5, zipY - 2, 5, 4, 1.2, rgbHex(0xFFFFFF, b));
+
+        // Cozy sky-blue scarf around neck + swaying tail
+        const sway = Math.sin(phase * 3.5) * 1.4 * p;
+        drawRoundRectDesign(28, topY - 2.5, 72, 7, 3.2, scarfCol);
+        drawRoundRectDesign(36 + sway * 0.4, topY + 3, 11, 15, 3, scarfCol);
+        ctx.fillStyle = rgbHex(0xFFFFFF, b * 0.9);
+        ctx.fillRect(sx(36.5 + sway * 0.4), sy(topY + 14.5), sw(10), sw(1.8));
+
+        // Plush sherpa hood framing top of head once zipped past halfway
+        if (p > 0.35) {
+          const hp = Math.min(1, (p - 0.35) / 0.45);
+          const hoodY = -6 + (1 - hp) * -10 + bobY * 0.5;
+          drawOvalDesign(64, hoodY + 4, 86, 18, rgbHex(0xE11D48, b * hp));
+          drawOvalDesign(64, hoodY + 7.5, 76, 14, '#000000');
+          for (let idx = -4; idx <= 4; idx++) {
+            const fx = 64 + idx * 9.5;
+            const fy = hoodY + 3 + idx * idx * 0.45;
+            drawOvalDesign(fx, fy, 11.5, 8.5, rgbHex(0xF8FAFC, b * hp));
+          }
+        }
+      }
+
+      if ((f.blanket_alpha || 0) > 0.04) {
+        const p = Math.max(0, Math.min(1, f.blanket_alpha));
+        const topY = 64 - 17 * p;
+        const h = Math.max(1, 64 - topY);
+        ctx.fillStyle = rgbHex(0x264659, b);
+        ctx.fillRect(sx(12), sy(topY + 2.5), sw(104), sw(Math.max(0, h - 2.5)));
+        ctx.fillStyle = rgbHex(0x8EC9DB, b);
+        ctx.fillRect(sx(11), sy(topY), sw(106), sw(3));
+        ctx.fillStyle = rgbHex(0xA8ECFF, b * 0.9);
+        ctx.fillRect(sx(13), sy(topY + 0.6), sw(102), sw(1.2));
+        if (p > 0.35) {
+          drawRoundRectDesign(22, topY - 1.4, 8, 3.6, 1.5, rgbHex(0xA8ECFF, b));
+          drawRoundRectDesign(98, topY - 1.4, 8, 3.6, 1.5, rgbHex(0xA8ECFF, b));
+        }
+        if (p > 0.55) {
+          const tw = 0.55 + 0.45 * Math.abs(Math.sin((f.weather_phase || 0) * 2));
+          ctx.fillStyle = rgbHex(0xFFD95A, b * tw);
+          for (const [sx0, sy0] of [[30, topY + 7], [54, topY + 10], [76, topY + 7.5], [96, topY + 10.5]]) {
+            if (sy0 < 62.5) ctx.fillRect(sx(sx0), sy(sy0), sw(2), sw(2));
+          }
+        }
+      }
+
+      if ((f.umbrella_alpha || 0) > 0.04) {
+        const p = Math.max(0, Math.min(1, f.umbrella_alpha));
+        const easeOpen = 1 - Math.pow(1 - p, 3);
+        const ub = b * Math.min(1, p * 1.6);
+        const phase = f.weather_phase || 0;
+        const angle = -0.37 + Math.sin(phase * 2.2) * 0.05 * p;
+        const pawX = 84;
+        const pawY = 53 + Math.sin(phase * 3) * 0.9 * p;
+        const shaftLen = 46 * (0.4 + 0.6 * easeOpen);
+        const domeX = pawX + shaftLen * Math.sin(angle);
+        const domeY = pawY - shaftLen * Math.cos(angle);
+        const hw = 6 + 38 * easeOpen;
+        const domeH = 5 + 16 * easeOpen;
+
+        // Smooth rotated umbrella (center shaft -> dome -> curved ribs -> J-handle -> Chintu paw)
+        ctx.save();
+        ctx.translate(sx(domeX), sy(domeY));
+        ctx.rotate(angle);
+
+        // Center shaft straight down from exact center of canopy
+        ctx.strokeStyle = rgbHex(0xE2E8F0, ub);
+        ctx.lineWidth = sw(2.0);
+        ctx.lineCap = 'round';
+        ctx.beginPath();
+        ctx.moveTo(0, -sw(domeH + 2.5));
+        ctx.lineTo(0, sw(shaftLen));
+        ctx.stroke();
+
+        // Top gold ferrule tip
+        ctx.fillStyle = rgbHex(0xFFD95A, ub);
+        ctx.beginPath();
+        ctx.arc(0, -sw(domeH + 2.5), sw(1.8), 0, Math.PI * 2);
+        ctx.fill();
+
+        // Curved J-handle at the bottom of the shaft
+        if (p > 0.25) {
+          ctx.strokeStyle = rgbHex(0xFFD95A, ub);
+          ctx.lineWidth = sw(2.3);
+          ctx.beginPath();
+          ctx.arc(-sw(3.2), sw(shaftLen), sw(3.2), 0, Math.PI, false);
+          ctx.stroke();
+        }
+
+        // Smooth bezier-scalloped canopy dome
+        ctx.beginPath();
+        ctx.ellipse(0, 0, sw(hw), sw(domeH), 0, Math.PI, 0, false);
+        // 3 clean upward scalloped cutouts across bottom rim
+        const seg = (hw * 2) / 3;
+        ctx.quadraticCurveTo(sw(hw - seg * 0.5), -sw(3.5 * easeOpen), sw(hw - seg), 0);
+        ctx.quadraticCurveTo(0, -sw(3.8 * easeOpen), sw(-hw + seg), 0);
+        ctx.quadraticCurveTo(sw(-hw + seg * 0.5), -sw(3.5 * easeOpen), sw(-hw), 0);
+        ctx.closePath();
+
+        const grad = ctx.createLinearGradient(sw(-hw), sw(-domeH), sw(hw), 0);
+        grad.addColorStop(0, rgbHex(0x38BDF8, ub));
+        grad.addColorStop(0.55, rgbHex(0x0EA5E9, ub));
+        grad.addColorStop(1, rgbHex(0x0369A1, ub));
+        ctx.fillStyle = grad;
+        ctx.fill();
+
+        // Crisp white-cyan ribs radiating from apex to scallop points
+        ctx.strokeStyle = rgbHex(0xE0F2FE, ub * 0.85);
+        ctx.lineWidth = sw(1.2);
+        for (const rx of [-hw + seg, hw - seg]) {
+          ctx.beginPath();
+          ctx.moveTo(0, -sw(domeH));
+          ctx.quadraticCurveTo(sw(rx * 0.45), -sw(domeH * 0.65), sw(rx), 0);
+          ctx.stroke();
+        }
+        ctx.restore();
+
+        // Cute cyan paw gripping the J-handle
+        if (p > 0.25) {
+          drawOvalDesign(pawX - 0.6, pawY - 1.2, 6.4, 5.4, rgbHex(0x8EC9DB, ub));
+          drawOvalDesign(pawX - 1.5, pawY - 2.0, 2.0, 1.8, rgbHex(0xFFFFFF, ub * 0.85));
+        }
+      }
+
+      if (f.weather_condition && (f.weather_intensity || 0) > 0.02) {
+        drawWeatherBadge(f);
+      }
+
       if ((f.heart_alpha || 0) > 0.05) {
-        const col = rgbHex(0xFF5C8A, b * f.heart_alpha);
-        ctx.fillStyle = col;
-        const hx = 114, hy = 12;
-        ctx.fillRect(sx(hx - 4), sy(hy - 2.5), sw(3.2), sw(3));
-        ctx.fillRect(sx(hx + 0.8), sy(hy - 2.5), sw(3.2), sw(3));
-        ctx.fillRect(sx(hx - 5), sy(hy - 0.5), sw(10), sw(2.8));
-        ctx.fillRect(sx(hx - 3.8), sy(hy + 2), sw(7.6), sw(2.2));
-        ctx.fillRect(sx(hx - 2.2), sy(hy + 4), sw(4.4), sw(1.8));
+        drawPixelHeart(114, 12, f.heart_alpha, b);
       }
 
       if ((f.alert_alpha || 0) > 0.05) {
@@ -516,6 +995,20 @@
       document.getElementById('dockBtn').textContent = 'Docked: OFF';
       sendCmd({ kicked_off_dock: true });
     }
+    function fetchLiveWeather() {
+      const city = (document.getElementById('weatherCityInput').value || '').trim() || 'New York';
+      sendCmd({ weather_city: city });
+    }
+    function toggleWeatherAmbient() {
+      wxAmbient = !wxAmbient;
+      document.getElementById('wxAmbientBtn').textContent = `Ambient: ${wxAmbient ? 'ON' : 'OFF'}`;
+      sendCmd({ weather_ambient: wxAmbient });
+    }
+    function toggleWeatherUnit() {
+      wxUnit = wxUnit === 'C' ? 'F' : 'C';
+      document.getElementById('wxUnitBtn').textContent = `Unit: °${wxUnit}`;
+      sendCmd({ weather_unit: wxUnit });
+    }
 
     function previewState(name) { previewMode = name; }
     function clearPreview() { previewMode = null; }
@@ -547,11 +1040,13 @@
           if (!s.host_audio && s.last_audio_cue && s.last_audio_cue.seq > lastAudioSeq) {
             lastAudioSeq = s.last_audio_cue.seq;
             const cue = s.last_audio_cue.cue || '';
-            if (cue.startsWith('reaction_')) {
+            if (cue === 'baby_yawn' && s.state !== 'YAWN') {
+              yawnAudio.currentTime = 0;
+              yawnAudio.play().catch(()=>{});
+            } else if (cue.startsWith('reaction_')) {
               const kind = cue.slice('reaction_'.length);
-              sfxPlayer.src = `/assets/sfx/${kind}.wav`;
-              sfxPlayer.currentTime = 0;
-              sfxPlayer.play().catch(()=>{});
+              const player = new Audio(`/assets/sfx/${kind}.wav`);
+              player.play().catch(()=>{});
             }
           }
           drawFrame(s.frame || {});
@@ -567,6 +1062,27 @@
           const wakeStr = s.last_wake_duration_s ? `${s.last_wake_duration_s.toFixed(2)}s` : '—';
           const alarmStr = (s.alarm_remaining_s !== null && s.alarm_remaining_s !== undefined) ? ` · ⏰ ${s.alarm_remaining_s.toFixed(1)}s` : '';
           document.getElementById('mWake').textContent = wakeStr + alarmStr;
+          if (typeof s.weather_ambient === 'boolean') {
+            wxAmbient = s.weather_ambient;
+            document.getElementById('wxAmbientBtn').textContent = `Ambient: ${wxAmbient ? 'ON' : 'OFF'}`;
+          }
+          if (s.weather_unit === 'C' || s.weather_unit === 'F') {
+            wxUnit = s.weather_unit;
+            document.getElementById('wxUnitBtn').textContent = `Unit: °${wxUnit}`;
+          }
+          const wxEl = document.getElementById('weatherMeta');
+          if (wxEl) {
+            if (s.weather_fetching) {
+              wxEl.textContent = 'Checking live sky via Open-Meteo...';
+            } else if (s.weather_error) {
+              wxEl.textContent = `Live weather unavailable (${s.weather_error}) — try preset buttons below.`;
+            } else if (s.weather) {
+              const tVal = wxUnit === 'F' ? `${s.weather.temp_f}°F` : `${s.weather.temp_c}°C`;
+              wxEl.textContent = `${s.weather.city} · ${s.weather.description} (${s.weather.condition}) · ${tVal} · Wind ${s.weather.wind_kmh} km/h · [${s.weather.source}]`;
+            } else {
+              wxEl.textContent = 'Weather: Off — pick a creative atmosphere or fetch live Open-Meteo weather.';
+            }
+          }
           const logEl = document.getElementById('tagLog');
           if (Array.isArray(s.tag_log) && s.tag_log.length) {
             logEl.innerHTML = s.tag_log.slice(-14).map(e => `[${e.timestamp_s.toFixed(2)}s] (${e.state}) ${e.tag}`).join('<br>');

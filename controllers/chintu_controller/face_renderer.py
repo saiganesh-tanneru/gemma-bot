@@ -36,6 +36,28 @@ COLOR_SPARKLE = 0xFFFFFF
 COLOR_GOLD = 0xFFD95A
 COLOR_CHARGE = 0x4CE894
 COLOR_TEAR = 0x44AAFF
+COLOR_CLOUD = 0x6D8FA3
+COLOR_CLOUD_BRIGHT = 0xA8C8DC
+COLOR_ORANGE = 0xFFA94D
+COLOR_LEAF = 0xFF8A5B
+
+
+_PIXEL_FONT_3X5: Dict[str, Tuple[str, ...]] = {
+    "0": ("111", "101", "101", "101", "111"),
+    "1": ("010", "110", "010", "010", "111"),
+    "2": ("111", "001", "111", "100", "111"),
+    "3": ("111", "001", "111", "001", "111"),
+    "4": ("101", "101", "111", "001", "001"),
+    "5": ("111", "100", "111", "001", "111"),
+    "6": ("111", "100", "111", "101", "111"),
+    "7": ("111", "001", "001", "010", "010"),
+    "8": ("111", "101", "111", "101", "111"),
+    "9": ("111", "101", "111", "001", "111"),
+    "-": ("000", "000", "111", "000", "000"),
+    "C": ("111", "100", "100", "100", "111"),
+    "F": ("111", "100", "110", "100", "100"),
+    " ": ("000", "000", "000", "000", "000"),
+}
 
 
 class DisplayTarget(Protocol):
@@ -98,6 +120,7 @@ class FaceFrameState:
     left_eye_open: float = 1.0
     right_eye_open: float = 1.0
     eye_scale: float = 1.0
+    face_scale: float = 1.0
     gaze_x: float = 0.0  # -1..+1
     gaze_y: float = 0.0  # -1..+1
     mouth_open: float = 0.0  # 0..1 for yawn bloom
@@ -118,6 +141,15 @@ class FaceFrameState:
     brightness: float = 1.0  # 0.40 in sleep, 1.00 awake
     dizzy_phase: float = 0.0
     blink_progress: float = 0.0
+    weather_condition: str = ""  # "" | sunny | cloudy | rainy | storm | snowy | windy | starry
+    weather_intensity: float = 0.0  # 0..1
+    weather_phase: float = 0.0  # continuous seconds for particles
+    weather_flash: float = 0.0  # 0..1 lightning flash intensity
+    weather_bolt: int = 0  # 0, 1, 2 alternating bolt positions during storm
+    weather_temp_label: str = ""  # e.g. "22C" or "72F"
+    umbrella_alpha: float = 0.0  # 0..1 overhead umbrella open progress during rain
+    blanket_alpha: float = 0.0  # 0..1 cozy pull-up blanket during starry night
+    jacket_alpha: float = 0.0  # 0..1 zip-up winter puffer jacket during snow
 
 
 def compute_uniform_band(disp_w: int, disp_h: int) -> Tuple[float, float, float]:
@@ -324,6 +356,356 @@ class FaceRenderer:
             self._rect(116, 4, 8, 5, COLOR_CHARGE, brightness)
             self._rect(124, 5, 2, 3, COLOR_CHARGE, brightness)
 
+    def _draw_pixel_cloud(self, cx: float, cy: float, scale_c: float, color: int, brightness: float) -> None:
+        self._rect(cx - 5.0 * scale_c, cy - 1.5 * scale_c, 10.0 * scale_c, 3.0 * scale_c, color, brightness)
+        self._rect(cx - 3.5 * scale_c, cy - 3.2 * scale_c, 4.5 * scale_c, 2.5 * scale_c, color, brightness)
+        self._rect(cx + 0.2 * scale_c, cy - 2.6 * scale_c, 3.5 * scale_c, 2.0 * scale_c, color, brightness)
+
+    def _draw_pixel_umbrella(self, cx: float, cy: float, progress: float, phase: float, brightness: float) -> None:
+        """Draws a smooth tilted umbrella with center shaft & J-handle held by Chintu's cyan paw."""
+        if progress <= 0.04:
+            return
+        p = max(0.0, min(1.0, float(progress)))
+        ease_open = 1.0 - (1.0 - p) ** 3
+        b = brightness * min(1.0, p * 1.6)
+
+        # Anchor paw & J-handle at right side (84, 53); shaft angles -21 deg up-left to dome center!
+        angle = -0.37 + math.sin(phase * 2.2) * 0.05 * p
+        sin_a = math.sin(angle)
+        cos_a = math.cos(angle)
+        paw_x = 84.0
+        paw_y = 53.0 + math.sin(phase * 3.0) * 0.9 * p
+        shaft_len = 46.0 * (0.4 + 0.6 * ease_open)
+        dome_cx = paw_x + shaft_len * sin_a
+        dome_cy = paw_y - shaft_len * cos_a
+
+        # Draw angled shaft from dome center down to paw
+        steps_s = 24
+        for i in range(steps_s + 1):
+            t = i / float(steps_s)
+            sx_pt = dome_cx - t * shaft_len * sin_a
+            sy_pt = dome_cy + t * shaft_len * cos_a
+            self._rect(sx_pt - 0.9, sy_pt - 0.9, 1.8, 1.8, 0xE2E8F0, b)
+
+        # Curved golden J-handle below paw + cute cyan paw gripping shaft
+        if p > 0.25:
+            self._draw_rounded_rect(paw_x - 0.8, paw_y, 2.0, 5.0, 0.8, COLOR_GOLD, b)
+            self._draw_rounded_rect(paw_x - 4.8, paw_y + 3.6, 5.8, 2.0, 0.9, COLOR_GOLD, b)
+            self._draw_rounded_rect(paw_x - 4.8, paw_y + 1.0, 2.0, 3.6, 0.9, COLOR_GOLD, b)
+            self._draw_oval(paw_x - 0.6, paw_y - 1.2, 6.2, 5.2, COLOR_EYE, b)
+            self._draw_oval(paw_x - 1.5, paw_y - 2.0, 2.0, 1.8, COLOR_WHITE, b * 0.8)
+
+        # Tilted smooth semicircular canopy centered on (dome_cx, dome_cy)
+        hw = 6.0 + 38.0 * ease_open
+        dome_h = 5.0 + 16.0 * ease_open
+        for i in range(-32, 33):
+            u = i / 32.0
+            # Local coords before tilt: smooth circular arc top, scalloped rim bottom
+            lx = u * hw
+            ly_top = -dome_h * math.sqrt(max(0.0, 1.0 - u * u))
+            scallop = abs(math.sin(u * math.pi * 1.5)) * 2.2 * ease_open
+            ly_bot = -scallop
+            # Fill column in rotated frame
+            steps_y = max(2, int(abs(ly_bot - ly_top) / 1.4))
+            is_rib = abs(u) < 0.04 or abs(abs(u) - 0.52) < 0.03
+            col = 0xBAE6FD if is_rib else (0x0EA5E9 if u < 0 else 0x0284C7)
+            for j in range(steps_y + 1):
+                ly = ly_top + (ly_bot - ly_top) * (j / float(steps_y))
+                rx = dome_cx + lx * cos_a - ly * sin_a
+                ry = dome_cy + lx * sin_a + ly * cos_a
+                self._rect(rx - 1.1, ry - 1.1, 2.2, 2.2, col, b)
+        # Top ferrule finial tip along shaft axis
+        fx = dome_cx + (dome_h + 2.2) * sin_a
+        fy = dome_cy - (dome_h + 2.2) * cos_a
+        self._draw_oval(fx, fy, 3.0, 3.0, COLOR_GOLD, b)
+
+    def _draw_pixel_blanket(self, progress: float, phase: float, brightness: float) -> None:
+        """Draws a cozy quilted starry blanket pulled up to Chintu's chin."""
+        if progress <= 0.04:
+            return
+        p = max(0.0, min(1.0, float(progress)))
+        b = brightness
+        top_y = 64.0 - 17.0 * p  # rises from y=64 up to y=47
+        h = max(1.0, 64.0 - top_y)
+        # Quilted blanket body
+        self._rect(12.0, top_y + 2.5, 104.0, max(0.0, h - 2.5), 0x264659, b)
+        # Soft folded top cuff
+        self._rect(11.0, top_y, 106.0, 3.0, COLOR_EYE, b)
+        self._rect(13.0, top_y + 0.6, 102.0, 1.2, COLOR_EYE_BRIGHT, b * 0.9)
+        # Little paws/tuck bumps gripping the blanket edge
+        if p > 0.35:
+            self._draw_rounded_rect(22.0, top_y - 1.4, 8.0, 3.6, 1.5, COLOR_EYE_BRIGHT, b)
+            self._draw_rounded_rect(98.0, top_y - 1.4, 8.0, 3.6, 1.5, COLOR_EYE_BRIGHT, b)
+        # Tiny cozy star speckles on the blanket once pulled up
+        if p > 0.55:
+            tw = 0.55 + 0.45 * abs(math.sin(phase * 2.0))
+            for sx0, sy0 in ((30.0, top_y + 7.0), (54.0, top_y + 10.0), (76.0, top_y + 7.5), (96.0, top_y + 10.5)):
+                if sy0 < 62.5:
+                    self._rect(sx0, sy0, 2.0, 2.0, COLOR_GOLD, b * tw)
+
+    def _draw_pixel_jacket(self, progress: float, phase: float, brightness: float) -> None:
+        """Draws Chintu wearing a cozy quilted winter parka + sherpa hood + scarf + rising zipper."""
+        if progress <= 0.04:
+            return
+        p = max(0.0, min(1.0, float(progress)))
+        b = brightness
+        slide = 1.0 - (1.0 - min(1.0, p * 1.4)) ** 3
+        bob_y = math.sin(phase * 3.0) * 0.7 * p
+
+        if self.disp_h >= 300:
+            # Cozy parka torso + padded shoulders in lower AMOLED space (y_design = 51..87)
+            top_y = 88.0 - 37.0 * slide + bob_y
+            coat_col = 0xE11D48  # rich winter crimson-berry parka
+            coat_seam = 0x9F1239
+            fur_col = 0xF8FAFC
+            scarf_col = 0x38BDF8
+
+            # Puffer sleeves / arms tucked snugly at sides
+            self._draw_rounded_rect(14.0, top_y + 4.0, 20.0, 26.0, 8.0, coat_col, b)
+            self._draw_rounded_rect(94.0, top_y + 4.0, 20.0, 26.0, 8.0, coat_col, b)
+            # Cute warm mitten-paws tucked at chest
+            self._draw_oval(33.0, top_y + 21.0, 11.0, 9.0, fur_col, b)
+            self._draw_oval(95.0, top_y + 21.0, 11.0, 9.0, fur_col, b)
+
+            # Main quilted puffer parka body
+            self._draw_rounded_rect(22.0, top_y, 84.0, 34.0, 10.0, coat_col, b)
+            # Horizontal quilted puffer ribs
+            for ry in (top_y + 10.0, top_y + 20.0, top_y + 29.0):
+                self._rect(25.0, ry, 78.0, 1.6, coat_seam, b)
+
+            # Center zipper track + animated gold zipper pull zipping UP
+            zip_prog = max(0.0, min(1.0, (p - 0.18) / 0.68))
+            self._rect(63.0, top_y + 2.0, 2.0, 30.0, 0x334155, b)
+            zip_y = (top_y + 28.0) - 24.0 * zip_prog
+            self._rect(63.2, zip_y, 1.6, (top_y + 31.0) - zip_y, COLOR_GOLD, b)
+            self._draw_rounded_rect(61.5, zip_y - 2.0, 5.0, 4.0, 1.2, COLOR_WHITE, b)
+
+            # Cozy blue knit scarf wrapped below chin + dangling scarf tail
+            sway = math.sin(phase * 3.5) * 1.4 * p
+            self._draw_rounded_rect(28.0, top_y - 2.5, 72.0, 7.0, 3.2, scarf_col, b)
+            self._draw_rounded_rect(36.0 + sway * 0.4, top_y + 3.0, 11.0, 15.0, 3.0, scarf_col, b)
+            self._rect(36.5 + sway * 0.4, top_y + 14.5, 10.0, 1.8, COLOR_WHITE, b * 0.9)
+
+            # Fluffy sherpa hood arch framing top/sides of head once zipped past halfway
+            if p > 0.35:
+                hp = min(1.0, (p - 0.35) / 0.45)
+                hood_y = -6.0 + (1.0 - hp) * -10.0 + bob_y * 0.5
+                self._draw_oval(64.0, hood_y + 4.0, 86.0, 18.0, coat_col, b * hp)
+                self._draw_oval(64.0, hood_y + 7.5, 76.0, 14.0, COLOR_BG, 1.0)
+                # Plush sherpa fur puffs arching over brow
+                for idx in range(-4, 5):
+                    fx = 64.0 + idx * 9.5
+                    fy = hood_y + 3.0 + (idx * idx) * 0.45
+                    self._draw_oval(fx, fy, 11.5, 8.5, fur_col, b * hp)
+        else:
+            top_y = 64.0 - 13.0 * slide
+            self._draw_rounded_rect(20.0, top_y, 88.0, 15.0, 4.0, 0xE11D48, b)
+            self._draw_rounded_rect(28.0, top_y - 2.0, 72.0, 4.5, 2.0, 0x38BDF8, b)
+
+    def _draw_pixel_text_screen(self, x: float, y: float, text: str, pixel_sz: float, color: int, brightness: float) -> None:
+        cx = x
+        for ch in str(text).upper():
+            if ch in ("C", "F") and cx > x:
+                # Tiny degree dot before C/F
+                self._screen_rect(cx, y, pixel_sz * 0.9, pixel_sz * 0.9, color, brightness)
+                cx += pixel_sz * 1.6
+            glyph = _PIXEL_FONT_3X5.get(ch)
+            if glyph is not None:
+                for row_idx, row in enumerate(glyph):
+                    for col_idx, bit in enumerate(row):
+                        if bit == "1":
+                            self._screen_rect(
+                                cx + col_idx * pixel_sz,
+                                y + row_idx * pixel_sz,
+                                pixel_sz,
+                                pixel_sz,
+                                color,
+                                brightness,
+                            )
+                cx += pixel_sz * 4.0
+
+    def _draw_weather_badge(self, state: FaceFrameState) -> None:
+        if self.disp_h < 300 or not state.weather_temp_label or state.bell_alpha > 0.05:
+            return
+        cond = state.weather_condition
+        b = max(0.55, state.brightness) * min(1.0, 0.55 + 0.45 * state.weather_intensity)
+        bx, by = 18.0, 18.0
+        # Mini corner icon
+        if cond == "sunny":
+            self._screen_rect(bx, by + 2, 10, 10, COLOR_GOLD, b)
+            self._screen_rect(bx + 3, by - 1, 4, 16, COLOR_GOLD, b)
+            self._screen_rect(bx - 3, by + 5, 16, 4, COLOR_GOLD, b)
+        elif cond == "starry":
+            self._screen_rect(bx + 2, by + 1, 8, 10, COLOR_GOLD, b)
+            self._screen_rect(bx + 5, by + 3, 6, 6, COLOR_BG, 1.0)
+        elif cond == "storm":
+            self._screen_rect(bx, by + 2, 12, 5, COLOR_CLOUD, b)
+            self._screen_rect(bx + 5, by + 7, 3, 4, COLOR_GOLD, b)
+            self._screen_rect(bx + 3, by + 10, 3, 4, COLOR_GOLD, b)
+        elif cond == "snowy":
+            self._screen_rect(bx + 4, by + 1, 2, 12, COLOR_WHITE, b)
+            self._screen_rect(bx - 1, by + 6, 12, 2, COLOR_WHITE, b)
+        elif cond == "windy":
+            self._screen_rect(bx, by + 3, 11, 2, COLOR_EYE_BRIGHT, b)
+            self._screen_rect(bx + 2, by + 8, 10, 2, COLOR_CHARGE, b)
+        else:
+            self._screen_rect(bx, by + 4, 12, 5, COLOR_CLOUD_BRIGHT, b)
+            self._screen_rect(bx + 3, by + 1, 6, 4, COLOR_CLOUD_BRIGHT, b)
+
+        self._draw_pixel_text_screen(bx + 20.0, by + 2.0, state.weather_temp_label, 2.5, COLOR_EYE_BRIGHT, b)
+
+    def _draw_weather_backdrop(self, state: FaceFrameState) -> None:
+        cond = state.weather_condition
+        inten = max(0.0, min(1.0, state.weather_intensity))
+        if not cond or inten <= 0.02:
+            return
+        t = state.weather_phase
+        b = state.brightness * inten
+
+        if cond == "sunny":
+            # Glowing animated sun in top-left of design band with rotating rays
+            sx0, sy0 = 14.0, 12.0
+            pulse = 1.0 + 0.08 * math.sin(t * 3.0)
+            self._draw_oval(sx0, sy0, 9.0 * pulse, 9.0 * pulse, COLOR_GOLD, b)
+            self._draw_oval(sx0, sy0, 5.2, 5.2, COLOR_WHITE, b * 0.85)
+            for k in range(8):
+                ang = k * (math.pi / 4.0) + t * 0.9
+                rx = sx0 + math.cos(ang) * 7.2
+                ry = sy0 + math.sin(ang) * 7.2
+                self._rect(rx - 0.9, ry - 0.9, 1.8, 1.8, COLOR_ORANGE, b)
+            # Warm twinkling sun glints across tall AMOLED margin
+            if self.disp_h >= 300:
+                for idx in range(5):
+                    gx = 55.0 + idx * 78.0
+                    gy = 70.0 + 20.0 * math.sin(t * 1.4 + idx)
+                    tw = 0.35 + 0.65 * abs(math.sin(t * 2.2 + idx * 1.1))
+                    self._screen_rect(gx, gy, 4, 4, COLOR_GOLD, b * tw)
+
+        elif cond == "cloudy":
+            c1x = ((t * 5.0) % 150.0) - 11.0
+            c2x = ((t * 3.2 + 75.0) % 150.0) - 11.0
+            self._draw_pixel_cloud(c1x, 8.0, 1.15, COLOR_CLOUD_BRIGHT, b * 0.9)
+            self._draw_pixel_cloud(c2x, 12.0, 0.9, COLOR_CLOUD, b * 0.8)
+
+        elif cond in ("rainy", "storm"):
+            if cond == "storm":
+                c_lit = 0xCBD5E1 if state.weather_flash > 0.2 else 0x475569
+                c_edge = 0x94A3B8 if state.weather_flash > 0.2 else 0x334155
+                for cx0, cy0, sc in ((28.0 + math.sin(t * 0.6) * 2.0, -6.0, 1.45), (98.0 - math.sin(t * 0.5) * 2.0, -5.0, 1.35), (64.0, -9.0, 1.25)):
+                    self._draw_oval(cx0 - 6.0 * sc, cy0 + 1.0 * sc, 11.0 * sc, 7.0 * sc, c_edge, b * 0.92)
+                    self._draw_oval(cx0 + 6.0 * sc, cy0 + 1.5 * sc, 10.0 * sc, 6.5 * sc, c_edge, b * 0.92)
+                    self._draw_oval(cx0, cy0 - 1.5 * sc, 13.0 * sc, 8.5 * sc, c_lit, b * 0.95)
+            else:
+                self._draw_pixel_cloud(22.0 + math.sin(t * 0.6) * 2.0, 8.0, 1.2, COLOR_CLOUD_BRIGHT, b * 0.9)
+                self._draw_pixel_cloud(106.0 - math.sin(t * 0.5) * 2.0, 9.0, 1.05, COLOR_CLOUD_BRIGHT, b * 0.85)
+            num_drops = 16 if cond == "storm" else 12
+            speed = 54.0 if cond == "storm" else 38.0
+            for i in range(num_drops):
+                # Keep drops primarily around left/right margins and full top/bottom sweep
+                lane = (i * 19 + 7) % 124
+                if 28 < lane < 100 and (i % 3 != 0):
+                    lane = (lane + 42) % 124
+                dy = (t * speed + i * 11.3) % 64.0
+                dx = (lane + dy * (0.25 if cond == "storm" else 0.10)) % 126.0
+                # Deflect drops off the big overhead tilted umbrella canopy when open!
+                if cond == "rainy" and state.umbrella_alpha > 0.35 and 16.0 <= dx <= 108.0:
+                    u_arc = (dx - 64.0) / 44.0
+                    dome_y = -4.0 + 14.0 * (u_arc * u_arc)
+                    if dy > dome_y:
+                        if dy < dome_y + 10.0:
+                            self._rect(dx - 1.2, dome_y - 1.5, 2.6, 1.4, COLOR_WHITE, b * 0.85)
+                        continue
+                drop_col = COLOR_EYE_BRIGHT if (i % 2 == 0) else COLOR_TEAR
+                self._rect(dx, dy, 1.3, 4.0 if cond == "storm" else 3.2, drop_col, b * 0.85)
+                if dy > 58.0:
+                    # Little puddle splash at floor
+                    self._rect(dx - 1.5, 62.0, 4.0, 1.2, COLOR_EYE_BRIGHT, b * 0.7)
+
+            if self.disp_h >= 300:
+                # Raindrops falling in top/bottom AMOLED black bands too
+                for i in range(10):
+                    rx = (i * 43 + 15) % self.disp_w
+                    ry = (t * 210.0 + i * 61.0) % self.disp_h
+                    if ry < self.band_y - 12 or ry > self.band_y + DESIGN_H * self.scale + 4:
+                        self._screen_rect(rx, ry, 2, 10, COLOR_TEAR, b * 0.65)
+
+            if cond == "storm" and state.weather_flash > 0.08:
+                fb = state.brightness * min(1.0, state.weather_flash)
+                # Tapered continuous jagged lightning bolt from cloud to tip (3 positions)
+                bolt_specs = (
+                    (101.0, -2.0, -1.0),
+                    (25.0, -3.0, 1.0),
+                    (74.0, -6.0, -1.0),
+                )
+                bx0, by0, d = bolt_specs[int(state.weather_bolt) % len(bolt_specs)]
+                for step_i in range(18):
+                    u = step_i / 17.0
+                    if u < 0.45:
+                        lu = u / 0.45
+                        px = bx0 + d * 7.0 * lu
+                        py = by0 + 13.0 * lu
+                        w = 5.2 - 1.2 * lu
+                    elif u < 0.52:
+                        px = bx0 + d * 1.5
+                        py = by0 + 12.0
+                        w = 6.5
+                    else:
+                        lu = (u - 0.52) / 0.48
+                        px = bx0 + d * (1.5 + 8.0 * lu)
+                        py = by0 + 12.0 + 14.0 * lu
+                        w = max(1.2, 4.4 * (1.0 - 0.78 * lu))
+                    self._rect(px - w * 0.5, py, w, 1.6, COLOR_GOLD, fb)
+                    if w > 2.2:
+                        self._rect(px - w * 0.25, py + 0.2, w * 0.5, 1.2, COLOR_WHITE, fb)
+
+        elif cond == "snowy":
+            for i in range(16):
+                base_x = (i * 17 + 5) % 124
+                fx = (base_x + math.sin(t * 1.8 + i) * 4.5) % 126.0
+                fy = (t * (10.0 + (i % 3) * 3.0) + i * 9.7) % 63.0
+                if i % 3 == 0:
+                    self._rect(fx - 1.2, fy, 3.4, 1.0, COLOR_WHITE, b * 0.9)
+                    self._rect(fx, fy - 1.2, 1.0, 3.4, COLOR_WHITE, b * 0.9)
+                else:
+                    self._rect(fx, fy, 1.6, 1.6, COLOR_EYE_BRIGHT, b * 0.85)
+            if self.disp_h >= 300:
+                for i in range(14):
+                    fx = ((i * 37 + 19) + math.sin(t * 1.4 + i) * 14.0) % self.disp_w
+                    fy = (t * (45.0 + (i % 3) * 12.0) + i * 47.0) % self.disp_h
+                    if fy < self.band_y - 8 or fy > self.band_y + DESIGN_H * self.scale + 4:
+                        self._screen_rect(fx, fy, 4, 4, COLOR_WHITE, b * 0.8)
+
+        elif cond == "windy":
+            for i in range(6):
+                wy = 7.0 + i * 10.5
+                wx = ((t * (70.0 + i * 8.0) + i * 28.0) % 156.0) - 20.0
+                wlen = 12.0 + (i % 3) * 5.0
+                col = COLOR_EYE_BRIGHT if i % 2 == 0 else COLOR_CHARGE
+                self._rect(wx, wy, wlen, 1.3, col, b * 0.75)
+                self._rect(wx + wlen - 3.0, wy - 1.6, 3.0, 1.3, col, b * 0.65)
+            # Tumbling pixel leaves
+            for i in range(4):
+                lx = ((t * 62.0 + i * 35.0) % 146.0) - 10.0
+                ly = 14.0 + i * 12.0 + math.sin(t * 5.0 + i) * 4.0
+                self._rect(lx, ly, 2.8, 1.8, COLOR_LEAF if i % 2 == 0 else COLOR_GOLD, b * 0.95)
+
+        elif cond == "starry":
+            # Crescent moon top-left
+            mx, my = 15.0, 11.0
+            self._draw_oval(mx, my, 8.5, 8.5, COLOR_GOLD, b * 0.95)
+            self._draw_oval(mx + 2.4, my - 1.2, 6.8, 6.8, COLOR_BG, 1.0)
+            # Twinkling stars
+            star_coords = ((34, 8), (64, 6), (96, 9), (116, 15), (12, 48), (118, 52), (52, 57), (80, 56))
+            for idx, (sx0, sy0) in enumerate(star_coords):
+                tw = 0.25 + 0.75 * abs(math.sin(t * 2.1 + idx * 0.9))
+                self._rect(sx0, sy0, 1.6, 1.6, COLOR_WHITE if idx % 2 == 0 else COLOR_GOLD, b * tw)
+            if self.disp_h >= 300:
+                for idx in range(12):
+                    sx0 = (idx * 39 + 24) % (self.disp_w - 10)
+                    sy0 = 44.0 + ((idx * 53) % 90) if idx < 6 else (self.disp_h - 120.0 + (idx * 17) % 95)
+                    tw = 0.25 + 0.75 * abs(math.sin(t * 1.9 + idx * 1.3))
+                    self._screen_rect(sx0, sy0, 3, 3, COLOR_GOLD if idx % 3 == 0 else COLOR_WHITE, b * tw)
+
     def _draw_eye_shape(
         self,
         cx: float,
@@ -366,14 +748,6 @@ class FaceRenderer:
 
         if mood == "LOVE":
             self._draw_pixel_heart(cx, cy - 1.0, 1.0, b)
-            return
-
-        if mood == "STAR_EYES":
-            for i in range(8):
-                span = 8 - i
-                self._rect(cx - span, cy - i, span * 2, 1.2, COLOR_GOLD, b)
-                self._rect(cx - span, cy + i, span * 2, 1.2, COLOR_GOLD, b)
-            self._rect(cx - 2.0, cy - 2.0, 4.0, 4.0, COLOR_WHITE, b)
             return
 
         if mood == "WINK" and not is_left:
@@ -545,20 +919,36 @@ class FaceRenderer:
         self.target.setColor(COLOR_BG)
         self.target.fillRectangle(0, 0, self.disp_w, self.disp_h)
 
+        if state.weather_condition and state.weather_intensity > 0.02:
+            self._draw_weather_backdrop(state)
+
         gx = max(-1.0, min(1.0, state.gaze_x)) * 7.0
         gy = max(-1.0, min(1.0, state.gaze_y)) * 4.5
         bx = state.face_bob_x
         by = state.face_bob_y
+        fsc = max(0.6, min(1.15, state.face_scale))
 
-        lcx = LEFT_EYE_CX + gx + bx
-        rcx = RIGHT_EYE_CX + gx + bx
+        lcx = (DESIGN_W * 0.5) - 24.0 * fsc + gx + bx
+        rcx = (DESIGN_W * 0.5) + 24.0 * fsc + gx + bx
         ecy = EYE_CY + gy + by
         mcx = (DESIGN_W * 0.5) + gx * 0.4 + bx
-        mcy = EYE_CY + gy * 0.5 + by
+        mcy = EYE_CY + gy * 0.5 + by - (1.0 - fsc) * 10.0
 
-        self._draw_eye_shape(lcx, ecy, state.left_eye_open, state.eye_scale, state.mood, True, state)
-        self._draw_eye_shape(rcx, ecy, state.right_eye_open, state.eye_scale, state.mood, False, state)
+        self._draw_eye_shape(lcx, ecy, state.left_eye_open, state.eye_scale * fsc, state.mood, True, state)
+        self._draw_eye_shape(rcx, ecy, state.right_eye_open, state.eye_scale * fsc, state.mood, False, state)
         self._draw_mouth(mcx, mcy, state)
+
+        if state.jacket_alpha > 0.04:
+            self._draw_pixel_jacket(state.jacket_alpha, state.weather_phase, state.brightness)
+
+        if state.blanket_alpha > 0.04:
+            self._draw_pixel_blanket(state.blanket_alpha, state.weather_phase, state.brightness)
+
+        if state.umbrella_alpha > 0.05:
+            self._draw_pixel_umbrella(64.0, 5.5, state.umbrella_alpha, state.weather_phase, state.brightness)
+
+        if state.weather_condition and state.weather_intensity > 0.02:
+            self._draw_weather_badge(state)
 
         # Sleep Zzz drifting +6 px over 3 s then fading
         if state.zzz_phase >= 0.0:

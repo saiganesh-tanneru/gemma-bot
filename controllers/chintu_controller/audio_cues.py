@@ -12,6 +12,7 @@ import io
 import math
 import os
 from pathlib import Path
+import random
 import shutil
 import struct
 import subprocess
@@ -147,6 +148,14 @@ SFX_KINDS: Tuple[str, ...] = (
     "babble_happy",
     "babble_curious",
     "babble_affection",
+    "weather_sunny",
+    "weather_cloudy",
+    "weather_rainy",
+    "weather_storm",
+    "weather_thunder",
+    "weather_snowy",
+    "weather_windy",
+    "weather_starry",
 )
 
 
@@ -273,6 +282,92 @@ def synthesize_sfx_wav(kind: str, sample_rate: int = 44100) -> bytes:
             sample_rate=sample_rate,
             harmonic2=0.10,
         )
+    if k in ("weather_sunny", "weather_cloudy", "weather_snowy", "weather_starry"):
+        # Musical weather mood chimes (bright marimba, soft cloud pluck, celesta sparkle, starry lullaby)
+        chords = {
+            "weather_sunny": (523.25, 659.25, 783.99, 987.77, 1046.50),
+            "weather_cloudy": (392.00, 493.88, 587.33, 440.00),
+            "weather_snowy": (1318.51, 987.77, 830.61, 1318.51, 1975.53),
+            "weather_starry": (440.00, 554.37, 659.25, 830.61, 880.00),
+        }
+        seq = chords[k]
+        dur = 0.90 if k != "weather_cloudy" else 0.85
+        harm = 0.08 if k in ("weather_snowy", "weather_starry") else 0.16
+
+        def _wx_chime(u: float) -> Tuple[float, float]:
+            n = len(seq)
+            pos = u * n
+            idx = min(n - 1, int(pos))
+            local = pos - idx
+            rise = min(1.0, local / 0.08)
+            decay = math.exp(-local * (3.2 if k == "weather_cloudy" else 4.2))
+            return (seq[idx], rise * decay)
+
+        return _render_procedural_sfx_wav(
+            dur,
+            _wx_chime,
+            peak_db=-14.5,
+            sample_rate=sample_rate,
+            harmonic2=harm,
+        )
+    if k in ("weather_rainy", "weather_storm", "weather_thunder", "weather_windy"):
+        # Deterministic procedural atmospheric textures (raindrops, thunder + zap, wind sweep)
+        dur = 1.15 if k == "weather_thunder" else (1.05 if k == "weather_storm" else 0.95)
+        total_n = max(1, int(round(dur * sample_rate)))
+        fade_n = max(1, int(round(0.03 * sample_rate)))
+        peak_amp = (10.0 ** ((-10.5 if k in ("weather_storm", "weather_thunder") else -14.0) / 20.0)) * 32767.0
+        seed = {"weather_rainy": 2026, "weather_storm": 991, "weather_thunder": 1337, "weather_windy": 404}[k]
+        rng = random.Random(seed)
+        lp = 0.0
+        lp2 = 0.0
+        drop_phase = 0.0
+        samples: List[int] = []
+        for i in range(total_n):
+            u = i / float(max(1, total_n - 1))
+            white = rng.uniform(-1.0, 1.0)
+            if k == "weather_rainy":
+                lp = lp * 0.82 + white * 0.18
+                # Cute water-drop plinks at 0.20, 0.50, 0.78
+                plink = 0.0
+                for t0, f0 in ((0.20, 880.0), (0.50, 740.0), (0.78, 1046.5)):
+                    if t0 <= u <= t0 + 0.14:
+                        lu = (u - t0) / 0.14
+                        drop_phase += 2.0 * math.pi * (f0 + 220.0 * lu) / sample_rate
+                        plink += math.sin(drop_phase) * math.exp(-lu * 6.0) * 0.65
+                sig = lp * 0.55 + plink
+            elif k == "weather_storm":
+                lp = lp * 0.96 + white * 0.04
+                # Crackling thunderbolt burst early + deep rumble tail
+                zap = (white * 0.9) * math.exp(-((u - 0.12) / 0.05) ** 2)
+                rumble = lp * 2.4 * (0.4 + 0.6 * math.sin(u * math.pi))
+                sig = max(-1.0, min(1.0, zap + rumble))
+            elif k == "weather_thunder":
+                lp = lp * 0.97 + white * 0.03
+                # Deep rolling double-boom thunder clap
+                clap1 = (white * 0.75) * math.exp(-((u - 0.08) / 0.04) ** 2)
+                clap2 = (white * 0.65) * math.exp(-((u - 0.44) / 0.06) ** 2)
+                boom = lp * 2.8 * (math.exp(-u * 1.4) + 0.65 * math.exp(-((u - 0.48) / 0.24) ** 2))
+                sig = max(-1.0, min(1.0, clap1 + clap2 + boom))
+            else:
+                # Smooth sweeping wind whoosh + soft whistle
+                alpha = 0.04 + 0.10 * math.sin(u * math.pi)
+                lp = lp * (1.0 - alpha) + white * alpha
+                lp2 = lp2 * 0.88 + lp * 0.12
+                drop_phase += 2.0 * math.pi * (380.0 + 260.0 * math.sin(u * math.pi)) / sample_rate
+                sig = lp2 * 1.9 + math.sin(drop_phase) * 0.16 * math.sin(u * math.pi)
+            env = 1.0
+            if i < fade_n:
+                env = i / float(fade_n)
+            elif i >= total_n - fade_n:
+                env = (total_n - 1 - i) / float(fade_n)
+            samples.append(int(max(-32767, min(32767, round(sig * env * peak_amp)))))
+        buf = io.BytesIO()
+        with wave.open(buf, "wb") as wf:
+            wf.setnchannels(1)
+            wf.setsampwidth(2)
+            wf.setframerate(sample_rate)
+            wf.writeframes(struct.pack("<" + "h" * len(samples), *samples))
+        return buf.getvalue()
     raise ValueError(f"Unknown SFX kind {kind!r}; expected one of {SFX_KINDS}")
 
 

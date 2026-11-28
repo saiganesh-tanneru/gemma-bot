@@ -22,6 +22,11 @@ from controllers.chintu_controller.registry import (
     validate_gesture,
     validate_mood,
 )
+from controllers.chintu_controller.weather import (
+    WeatherService,
+    WeatherSnapshot,
+    default_simulated_weather,
+)
 
 
 class ChintuState(str, Enum):
@@ -138,6 +143,7 @@ class ChintuStateMachine:
         face_target_provider: Optional[Callable[[], Optional[float]]] = None,
         rng: Optional[random.Random] = None,
         cold_startup: bool = True,
+        weather_service: Optional[WeatherService] = None,
     ) -> None:
         self.rng = rng or random.Random(42)
         self.audio = audio_player or NullAudioCuePlayer()
@@ -197,6 +203,13 @@ class ChintuStateMachine:
         self._reaction_kind: Optional[str] = None
         self._kicked_off_phase: int = 0
         self._alarm_bell_until_s: float = -1.0
+
+        # Weather state & ambient overlay
+        self.weather_service: WeatherService = weather_service or WeatherService()
+        self.weather_snapshot: Optional[WeatherSnapshot] = None
+        self.weather_ambient: bool = True
+        self.weather_unit: str = "C"
+        self.weather_error: Optional[str] = None
 
         # Drowsy progression
         self._drowsy_yawn_started: bool = False
@@ -302,6 +315,16 @@ class ChintuStateMachine:
             return True
         if kind == "ring_alarm":
             return self.trigger_alarm()
+        if kind == "weather_clear":
+            self.clear_weather()
+            return True
+        if kind == "weather_live":
+            city = LocalWakeWordDetector.extract_weather_city(phrase)
+            return self.trigger_live_weather(city)
+        if kind == "weather_preset":
+            cond = LocalWakeWordDetector.extract_weather_preset(phrase)
+            if cond is not None:
+                return self.trigger_weather(cond)
         # Any other conversational phrase while awake makes Chintu talk with EMO babble + D-mouth!
         if self.state == ChintuState.IDLE_AWAKE and phrase and phrase.strip():
             return self.trigger_talk(phrase)
@@ -538,6 +561,112 @@ class ChintuStateMachine:
             self.servos.move_to(10.0, 5.0, 0.3, now_s=self.now_s, wake_limits=True)
         return True
 
+    def set_weather_ambient(self, enabled: bool) -> None:
+        self.weather_ambient = bool(enabled)
+
+    def set_weather_unit(self, unit: str) -> None:
+        u = str(unit).upper().strip()
+        if u in ("C", "F"):
+            self.weather_unit = u
+
+    def clear_weather(self) -> None:
+        self.weather_snapshot = None
+        self.weather_error = None
+        if self._reaction_kind == "weather":
+            self._reaction_until_s = -1.0
+            self._reaction_kind = None
+            self._reaction_shiver = False
+            self._reaction_happy_arcs = False
+            self._reaction_sparkles = False
+            self._reaction_heart = False
+            self.current_mood = "NEUTRAL"
+
+    def trigger_live_weather(self, city: Optional[str] = None) -> bool:
+        """Requests non-blocking live weather lookup and looks up curiously while waiting."""
+        self.weather_error = None
+        self.weather_service.request_live_weather(city=city)
+        if self.state != ChintuState.IDLE_AWAKE:
+            return False
+        self.last_interaction_s = self.now_s
+        self.meters.boredom = 0.0
+        self._reaction_started_s = self.now_s
+        self._reaction_until_s = self.now_s + 2.2
+        self._reaction_mood = "THINKING"
+        self._reaction_gesture = "curious"
+        self._reaction_gaze = (-0.25, -0.55)
+        self._reaction_heart = False
+        self._reaction_sparkles = False
+        self._reaction_happy_arcs = False
+        self._reaction_shiver = False
+        self._reaction_kind = "weather_lookup"
+        self._kicked_off_phase = 1
+        self.audio.play_reaction_chirp("curious", now_s=self.now_s)
+        self._emit_tag(mood="THINKING", gesture="curious")
+        if self.dock.is_docked():
+            self.servos.move_to(-10.0, 8.0, 0.35, now_s=self.now_s, wake_limits=True)
+        return True
+
+    def trigger_weather(
+        self,
+        condition: str,
+        city: str = "Playground",
+        temp_c: Optional[float] = None,
+        wind_kmh: Optional[float] = None,
+        snapshot: Optional[WeatherSnapshot] = None,
+    ) -> bool:
+        """Starts Chintu's multi-beat creative Weather Show (IDLE_AWAKE only for animation)."""
+        snap = snapshot or default_simulated_weather(
+            condition,
+            city=city,
+            temp_c=temp_c,
+            wind_kmh=wind_kmh,
+        )
+        self.weather_snapshot = snap
+        self.weather_error = None
+        if self.state != ChintuState.IDLE_AWAKE:
+            return False
+
+        cond = snap.condition
+        self.last_interaction_s = self.now_s
+        self.meters.boredom = 0.0
+        self._reaction_started_s = self.now_s
+        duration_map = {
+            "storm": 6.2,
+            "cloudy": 4.6,
+            "windy": 5.0,
+            "rainy": 5.4,
+            "snowy": 5.6,
+            "starry": 5.8,
+        }
+        self._reaction_until_s = self.now_s + duration_map.get(cond, 5.2)
+        self._reaction_heart = False
+        self._reaction_sparkles = False
+        self._reaction_happy_arcs = False
+        self._reaction_shiver = True
+        self._reaction_kind = "weather"
+        self._kicked_off_phase = 1
+
+        beat1_map = {
+            "sunny": ("HAPPY", "perk_up", (-0.6, -0.5), 14.0, 10.0, False, True),
+            "cloudy": ("THINKING", "curious", (-0.4, -0.55), -14.0, 8.0, False, False),
+            "rainy": ("SURPRISED", "curious", (0.0, -0.55), 0.0, 10.0, False, False),
+            "storm": ("SURPRISED", "shiver", (0.2, -0.35), 10.0, 4.0, False, False),
+            "snowy": ("SURPRISED", "perk_up", (0.0, -0.35), 0.0, 8.0, False, True),
+            "windy": ("SURPRISED", "shiver", (0.75, 0.0), 18.0, 2.0, False, False),
+            "starry": ("NEUTRAL", "perk_up", (-0.35, -0.50), -12.0, 10.0, False, True),
+        }
+        mood, gesture, gaze, pan, tilt, heart, sparkles = beat1_map[cond]
+        self._reaction_mood = mood
+        self._reaction_gesture = gesture
+        self._reaction_gaze = gaze
+        self._reaction_heart = heart
+        self._reaction_sparkles = sparkles
+        self.audio.play_reaction_chirp(f"weather_{cond}", now_s=self.now_s)
+        self._emit_tag(mood=mood, gesture=gesture)
+        if self.dock.is_docked():
+            self.servos.move_to(pan, tilt, 0.35, now_s=self.now_s, wake_limits=True)
+        return True
+
     def trigger_kicked_off_dock(self) -> bool:
         """Simulates sudden loss of both charging and dock safety."""
         self.charging.set_manual_override(False)
@@ -596,6 +725,23 @@ class ChintuStateMachine:
         if self._next_alarm_s is not None and self.now_s >= self._next_alarm_s:
             self._next_alarm_s = None
             self.trigger_alarm()
+
+        # 2b. Non-blocking live weather poll
+        wx_snap, wx_err = self.weather_service.poll_result()
+        if wx_snap is not None:
+            self.trigger_weather(wx_snap.condition, snapshot=wx_snap)
+        elif wx_err is not None:
+            self.weather_error = wx_err
+            if self.state == ChintuState.IDLE_AWAKE:
+                self._reaction_started_s = self.now_s
+                self._reaction_until_s = self.now_s + 2.0
+                self._reaction_mood = "PLEADING"
+                self._reaction_gesture = "confused"
+                self._reaction_gaze = (0.0, 0.15)
+                self._reaction_shiver = False
+                self._reaction_kind = "weather_error"
+                self.audio.play_reaction_chirp("whimper", now_s=self.now_s)
+                self._emit_tag(mood="PLEADING", gesture="confused")
 
         # 3. Cold startup auto-wake after ~1.0s sleep face + safe servo center
         if self._cold_boot_pending and self.state in SLEEP_STATES:
@@ -940,6 +1086,27 @@ class ChintuStateMachine:
         breath = math.sin(2.0 * math.pi * self.now_s / 4.0) * 0.6
         talk_open = 0.0
         talk_width = 0.5
+        umbrella_alpha = 0.0
+        blanket_alpha = 0.0
+        jacket_alpha = 0.0
+        wx_mouth_open = 0.0
+        wx_mouth_wobble = 0.0
+        wx_zzz_phase = -1.0
+        wx_face_mode = "content_idle"
+        wx_face_scale = 1.0
+        weather_flash = 0.0
+        weather_bolt = 0
+        active_wx_cond = ""
+        active_wx_intensity = 0.0
+        active_wx_temp = ""
+        if self.weather_snapshot is not None:
+            active_wx_cond = self.weather_snapshot.condition
+            active_wx_temp = self.weather_snapshot.format_temp(self.weather_unit)
+            if self.now_s < self._reaction_until_s and self._reaction_kind == "weather":
+                active_wx_intensity = 1.0
+            elif self.weather_ambient:
+                active_wx_intensity = 0.55
+
         if self.now_s < self._reaction_until_s and self._reaction_mood is not None:
             bob_x = 0.0
             bob_y = breath
@@ -950,7 +1117,30 @@ class ChintuStateMachine:
             l_open = 1.0
             r_open = 1.0
             reaction_blink = blink
-            if self._reaction_shiver and self._reaction_kind == "talk":
+            if self._reaction_shiver and self._reaction_kind == "weather" and self.weather_snapshot is not None:
+                (
+                    bob_x,
+                    bob_y,
+                    eye_scale,
+                    gaze_x,
+                    gaze_y,
+                    l_open,
+                    r_open,
+                    reaction_blink,
+                    alert_alpha,
+                    sweat_alpha,
+                    umbrella_alpha,
+                    weather_flash,
+                    wx_mouth_open,
+                    wx_mouth_wobble,
+                    blanket_alpha,
+                    jacket_alpha,
+                    wx_zzz_phase,
+                    wx_face_mode,
+                    wx_face_scale,
+                    weather_bolt,
+                ) = self._step_weather_reaction(self.weather_snapshot.condition, breath, blink)
+            elif self._reaction_shiver and self._reaction_kind == "talk":
                 rel = self.now_s - self._reaction_started_s
                 if rel < 1.55:
                     # Smooth continuous multi-syllable :D smile-talk cadence (never snaps to 0)
@@ -1155,26 +1345,39 @@ class ChintuStateMachine:
                     gaze_y = 0.0
                     reaction_blink = abs(math.sin(u * math.pi / 0.22)) if u < 0.44 else 0.0
             return FaceFrameState(
-                face_mode="content_idle",
+                face_mode=wx_face_mode,
                 mood=self._reaction_mood,
                 left_eye_open=l_open,
                 right_eye_open=r_open,
                 eye_scale=eye_scale,
+                face_scale=wx_face_scale,
                 gaze_x=gaze_x,
                 gaze_y=gaze_y,
                 face_bob_x=bob_x,
                 face_bob_y=bob_y,
+                mouth_open=wx_mouth_open,
+                mouth_wobble=wx_mouth_wobble,
                 happy_arcs=self._reaction_happy_arcs,
                 sparkles=1.0 if self._reaction_sparkles else 0.0,
                 heart_alpha=1.0 if self._reaction_heart else 0.0,
                 sweat_alpha=sweat_alpha,
                 alert_alpha=alert_alpha,
                 bell_alpha=1.0 if self.now_s < self._alarm_bell_until_s else 0.0,
+                zzz_phase=wx_zzz_phase,
                 talk_open=talk_open,
                 talk_width=talk_width,
-                smile_amount=0.85 if self._reaction_mood in ("HAPPY", "WINK") else 0.35,
+                smile_amount=0.85 if self._reaction_mood in ("HAPPY", "WINK", "COOL", "SMIRK", "LOVE") else 0.35,
                 blink_progress=reaction_blink,
                 dizzy_phase=self.now_s,
+                weather_condition=active_wx_cond,
+                weather_intensity=active_wx_intensity,
+                weather_phase=self.now_s,
+                weather_flash=weather_flash,
+                weather_bolt=weather_bolt,
+                weather_temp_label=active_wx_temp,
+                umbrella_alpha=umbrella_alpha,
+                blanket_alpha=blanket_alpha,
+                jacket_alpha=jacket_alpha,
             )
         self.is_speaking = False
         self._reaction_shiver = False
@@ -1192,6 +1395,374 @@ class ChintuStateMachine:
             face_bob_y=breath,
             smile_amount=0.35,
             blink_progress=blink,
+            weather_condition=active_wx_cond,
+            weather_intensity=active_wx_intensity,
+            weather_phase=self.now_s,
+            weather_flash=0.0,
+            weather_temp_label=active_wx_temp,
+        )
+
+    def _step_weather_reaction(
+        self, cond: str, breath: float, blink: float
+    ) -> Tuple[float, float, float, float, float, float, float, float, float, float, float, float, float, float, float, float, float, str, float, int]:
+        """Advances multi-beat expressive Weather Show choreography."""
+        rel = self.now_s - self._reaction_started_s
+        bob_x, bob_y = 0.0, breath
+        eye_scale = 1.0
+        gaze_x, gaze_y = self._reaction_gaze
+        l_open, r_open = 1.0, 1.0
+        reaction_blink = blink
+        alert_alpha = 0.0
+        sweat_alpha = 0.0
+        umbrella_alpha = 0.0
+        weather_flash = 0.0
+        weather_bolt = 0
+        mouth_open = 0.0
+        mouth_wobble = 0.0
+        blanket_alpha = 0.0
+        jacket_alpha = 0.0
+        zzz_phase = -1.0
+        face_mode = "content_idle"
+        face_scale = 1.0
+
+        if cond == "sunny":
+            if rel >= 1.20 and self._kicked_off_phase < 2:
+                self._kicked_off_phase = 2
+                self._reaction_mood = "COOL"
+                self._reaction_gesture = "groove"
+                self._reaction_sparkles = False
+                self._emit_tag(mood="COOL", gesture="groove")
+            elif rel >= 4.00 and self._kicked_off_phase < 3:
+                self._kicked_off_phase = 3
+                self._reaction_mood = "WINK"
+                self._reaction_gesture = "nod"
+                self._emit_tag(mood="WINK", gesture="nod")
+                if self.dock.is_docked():
+                    self.servos.move_to(0.0, -3.0, 0.3, now_s=self.now_s, wake_limits=True)
+            elif rel >= 4.75 and self._kicked_off_phase < 4:
+                self._kicked_off_phase = 4
+                self._reaction_mood = "NEUTRAL"
+                self._emit_tag(mood="NEUTRAL")
+                if self.dock.is_docked():
+                    self.servos.move_to(0.0, 2.0, 0.3, now_s=self.now_s, wake_limits=True)
+
+            if rel < 1.20:
+                gaze_x, gaze_y = -0.6, -0.5
+                bob_y = -1.0 * abs(math.sin(rel * 5.0))
+            elif rel < 4.00:
+                u = rel - 1.20
+                bob_x = 2.6 * math.sin(u * 3.4)
+                bob_y = -1.2 * abs(math.sin(u * 6.8))
+                gaze_x, gaze_y = 0.3 * math.sin(u * 2.2), 0.0
+                if self.dock.is_docked():
+                    self.servos.snap_target_for_tick(10.0 * math.sin(u * 2.6), 3.0 + 3.0 * math.cos(u * 5.2), self.now_s, wake_limits=True)
+            else:
+                gaze_x, gaze_y = 0.0, 0.0
+
+        elif cond == "cloudy":
+            if rel >= 2.40 and self._kicked_off_phase < 2:
+                self._kicked_off_phase = 2
+                self._reaction_mood = "HAPPY"
+                self._reaction_gesture = "nod"
+                self._emit_tag(mood="HAPPY", gesture="nod")
+                if self.dock.is_docked():
+                    self.servos.move_to(12.0, 4.0, 0.45, now_s=self.now_s, wake_limits=True)
+            elif rel >= 4.10 and self._kicked_off_phase < 3:
+                self._kicked_off_phase = 3
+                self._reaction_mood = "NEUTRAL"
+                self._emit_tag(mood="NEUTRAL")
+                if self.dock.is_docked():
+                    self.servos.move_to(0.0, 2.0, 0.3, now_s=self.now_s, wake_limits=True)
+
+            if rel < 2.40:
+                gaze_x = -0.65 + 1.30 * min(1.0, rel / 2.2)
+                gaze_y = -0.55
+            else:
+                gaze_x, gaze_y = 0.0, 0.0
+
+        elif cond == "rainy":
+            if rel >= 0.95 and self._kicked_off_phase < 2:
+                self._kicked_off_phase = 2
+                self._reaction_mood = "HAPPY"
+                self._reaction_gesture = "tilt_left"
+                self._emit_tag(mood="HAPPY", gesture="tilt_left")
+                if self.dock.is_docked():
+                    self.servos.move_to(-8.0, 3.0, 0.35, now_s=self.now_s, wake_limits=True)
+            elif rel >= 4.00 and self._kicked_off_phase < 3:
+                self._kicked_off_phase = 3
+                self._reaction_mood = "HAPPY"
+                self._reaction_gesture = "bounce"
+                self._reaction_happy_arcs = True
+                self._reaction_sparkles = True
+                self._emit_tag(mood="HAPPY", gesture="bounce")
+                if self.dock.is_docked():
+                    self.servos.move_to(0.0, 4.0, 0.3, now_s=self.now_s, wake_limits=True)
+            elif rel >= 5.00 and self._kicked_off_phase < 4:
+                self._kicked_off_phase = 4
+                self._reaction_mood = "NEUTRAL"
+                self._reaction_happy_arcs = False
+                self._reaction_sparkles = False
+                self._emit_tag(mood="NEUTRAL")
+                if self.dock.is_docked():
+                    self.servos.move_to(0.0, 2.0, 0.3, now_s=self.now_s, wake_limits=True)
+
+            if rel < 0.95:
+                eye_scale = 1.10
+                gaze_x, gaze_y = 0.0, -0.55
+            elif rel < 4.00:
+                u = rel - 0.95
+                umbrella_alpha = min(1.0, u / 0.45)
+                step_in = min(1.0, u / 0.45)
+                face_scale = 1.0 - 0.24 * step_in
+                bob_x = -17.0 * step_in
+                bob_y = 5.0 * step_in + math.sin(u * 3.0) * 0.7
+                gaze_x = 0.20 + 0.35 * math.sin(u * 2.0)
+                gaze_y = -0.25 + 0.25 * ((u * 0.7) % 1.0)
+            else:
+                u = rel - 4.00
+                umbrella_alpha = max(0.0, 1.0 - max(0.0, rel - 4.90) / 0.45)
+                step_out = max(0.0, 1.0 - max(0.0, rel - 4.90) / 0.45)
+                face_scale = 1.0 - 0.24 * step_out
+                bob_x = -17.0 * step_out
+                bob_y = 5.0 * step_out - 1.5 * abs(math.sin(u * 8.0)) * step_out
+                gaze_x, gaze_y = 0.0, 0.0
+
+        elif cond == "storm":
+            # 3 thunder & lightning strikes (0.0s right bolt, 1.85s left forked bolt, 3.35s upper bolt)
+            if rel >= 1.85 and self._kicked_off_phase < 2:
+                self._kicked_off_phase = 2
+                self._reaction_mood = "PLEADING"
+                self._reaction_gesture = "peek_a_boo"
+                self.audio.play_reaction_chirp("weather_thunder", now_s=self.now_s)
+                self._emit_tag(mood="PLEADING", gesture="peek_a_boo")
+                if self.dock.is_docked():
+                    self.servos.move_to(-18.0, -5.0, 0.3, now_s=self.now_s, wake_limits=True)
+            elif rel >= 3.35 and self._kicked_off_phase < 3:
+                self._kicked_off_phase = 3
+                self._reaction_mood = "SURPRISED"
+                self._reaction_gesture = "shiver"
+                self.audio.play_reaction_chirp("weather_thunder", now_s=self.now_s)
+                self._emit_tag(mood="SURPRISED", gesture="shiver")
+                if self.dock.is_docked():
+                    self.servos.move_to(14.0, 4.0, 0.3, now_s=self.now_s, wake_limits=True)
+            elif rel >= 4.25 and self._kicked_off_phase < 4:
+                self._kicked_off_phase = 4
+                self._reaction_mood = "COOL"
+                self._reaction_gesture = "shake"
+                self._emit_tag(mood="COOL", gesture="shake")
+                if self.dock.is_docked():
+                    self.servos.move_to(0.0, 3.0, 0.35, now_s=self.now_s, wake_limits=True)
+            elif rel >= 5.50 and self._kicked_off_phase < 5:
+                self._kicked_off_phase = 5
+                self._reaction_mood = "NEUTRAL"
+                self._emit_tag(mood="NEUTRAL")
+                if self.dock.is_docked():
+                    self.servos.move_to(0.0, 2.0, 0.3, now_s=self.now_s, wake_limits=True)
+
+            def _lightning_pulse(dt_strike: float) -> float:
+                if dt_strike < 0.0 or dt_strike > 0.85:
+                    return 0.0
+                if dt_strike < 0.14:
+                    return 1.0
+                if dt_strike < 0.20:
+                    return 0.35
+                if dt_strike < 0.42:
+                    return 0.95
+                return max(0.0, 0.95 * (1.0 - (dt_strike - 0.42) / 0.43))
+
+            if rel < 1.85:
+                # Thunder #1
+                weather_bolt = 0
+                weather_flash = _lightning_pulse(rel)
+                alert_alpha = 1.0 if rel < 1.15 else 0.0
+                eye_scale = 1.24 if rel < 1.15 else 1.10
+                bob_x = 4.2 * math.sin(rel * 34.0) * max(0.0, 1.0 - rel / 1.5)
+                bob_y = 2.0 * math.cos(rel * 40.0) * max(0.0, 1.0 - rel / 1.5)
+                gaze_x, gaze_y = 0.55, -0.35
+                reaction_blink = 0.0
+            elif rel < 3.35:
+                # Thunder #2
+                u = rel - 1.85
+                weather_bolt = 1
+                weather_flash = _lightning_pulse(u)
+                alert_alpha = 1.0 if u < 0.65 else 0.0
+                sweat_alpha = 1.0
+                gaze_x = -0.70 if u < 0.65 else 0.65 * math.sin(u * 4.5)
+                gaze_y = -0.25 if u < 0.45 else 0.25
+                bob_x = -3.8 * math.sin(u * 30.0) * max(0.0, 1.0 - u / 1.1)
+                reaction_blink = 0.0
+            elif rel < 4.25:
+                # Thunder #3
+                u = rel - 3.35
+                weather_bolt = 2
+                weather_flash = _lightning_pulse(u)
+                alert_alpha = 1.0 if u < 0.55 else 0.0
+                sweat_alpha = max(0.0, 1.0 - u / 0.9)
+                eye_scale = 1.20
+                bob_x = 3.2 * math.sin(u * 32.0) * max(0.0, 1.0 - u / 0.8)
+                gaze_x, gaze_y = 0.4, -0.4
+                reaction_blink = 0.0
+            else:
+                gaze_x, gaze_y = 0.0, 0.0
+
+        elif cond == "snowy":
+            if rel >= 1.10 and self._kicked_off_phase < 2:
+                self._kicked_off_phase = 2
+                self._reaction_mood = "PLEADING"
+                self._reaction_gesture = "shiver"
+                self._reaction_sparkles = False
+                self._emit_tag(mood="PLEADING", gesture="shiver")
+                if self.dock.is_docked():
+                    self.servos.move_to(0.0, -4.0, 0.35, now_s=self.now_s, wake_limits=True)
+            elif rel >= 3.25 and self._kicked_off_phase < 3:
+                self._kicked_off_phase = 3
+                self._reaction_mood = "HAPPY"
+                self._reaction_gesture = "cheer"
+                self._reaction_happy_arcs = True
+                self._reaction_heart = True
+                self._emit_tag(mood="HAPPY", gesture="cheer")
+                if self.dock.is_docked():
+                    self.servos.move_to(0.0, 4.0, 0.35, now_s=self.now_s, wake_limits=True)
+            elif rel >= 5.10 and self._kicked_off_phase < 4:
+                self._kicked_off_phase = 4
+                self._reaction_mood = "NEUTRAL"
+                self._reaction_happy_arcs = False
+                self._reaction_heart = False
+                self._emit_tag(mood="NEUTRAL")
+                if self.dock.is_docked():
+                    self.servos.move_to(0.0, 2.0, 0.3, now_s=self.now_s, wake_limits=True)
+
+            if rel < 1.10:
+                gaze_x = 0.40 * math.sin(rel * 2.8)
+                gaze_y = -0.35 + 0.45 * (rel / 1.10)
+            elif rel < 3.25:
+                u = rel - 1.10
+                jacket_alpha = min(1.0, u / 1.80)
+                shiver_damp = max(0.10, 1.0 - jacket_alpha)
+                bob_x = 2.0 * shiver_damp * math.sin(u * 40.0)
+                gaze_x, gaze_y = 0.0, 0.1
+                reaction_blink = 0.0
+            else:
+                u = rel - 3.25
+                jacket_alpha = 1.0 if rel < 5.10 else max(0.0, 1.0 - (rel - 5.10) / 0.50)
+                bob_y = -1.4 * abs(math.sin(u * 7.0))
+                gaze_x, gaze_y = 0.0, 0.0
+
+        elif cond == "windy":
+            if rel >= 1.60 and self._kicked_off_phase < 2:
+                self._kicked_off_phase = 2
+                self._reaction_mood = "DIZZY"
+                self._reaction_gesture = "wiggle"
+                self._emit_tag(mood="DIZZY", gesture="wiggle")
+                if self.dock.is_docked():
+                    self.servos.move_to(-16.0, 3.0, 0.4, now_s=self.now_s, wake_limits=True)
+            elif rel >= 3.30 and self._kicked_off_phase < 3:
+                self._kicked_off_phase = 3
+                self._reaction_mood = "SMIRK"
+                self._reaction_gesture = "nod"
+                self._emit_tag(mood="SMIRK", gesture="nod")
+                if self.dock.is_docked():
+                    self.servos.move_to(0.0, 2.0, 0.35, now_s=self.now_s, wake_limits=True)
+            elif rel >= 4.55 and self._kicked_off_phase < 4:
+                self._kicked_off_phase = 4
+                self._reaction_mood = "NEUTRAL"
+                self._emit_tag(mood="NEUTRAL")
+
+            if rel < 1.60:
+                gust = math.sin((rel / 1.60) * math.pi)
+                bob_x = 5.4 * gust
+                gaze_x = 0.75 * gust
+                l_open = 0.45
+                r_open = 0.78
+                reaction_blink = 0.0
+            elif rel < 3.30:
+                u = rel - 1.60
+                bob_x = 3.2 * math.sin(u * 8.0)
+                gaze_x = 0.5 * math.cos(u * 6.0)
+            else:
+                gaze_x, gaze_y = 0.0, 0.0
+
+        elif cond == "starry":
+            if rel >= 1.40 and self._kicked_off_phase < 2:
+                self._kicked_off_phase = 2
+                self._reaction_mood = "SLEEPY"
+                self._reaction_gesture = "yawn"
+                self._reaction_sparkles = False
+                self.audio.play_baby_yawn(now_s=self.now_s)
+                self._emit_tag(mood="SLEEPY", gesture="yawn")
+                if self.dock.is_docked():
+                    self.servos.move_to(0.0, 10.0, 0.55, now_s=self.now_s, wake_limits=True)
+            elif rel >= 3.45 and self._kicked_off_phase < 3:
+                self._kicked_off_phase = 3
+                self._reaction_mood = "SLEEPY"
+                self._reaction_gesture = "shy"
+                self._reaction_heart = True
+                self._emit_tag(mood="SLEEPY", gesture="shy")
+                if self.dock.is_docked():
+                    self.servos.move_to(0.0, -5.0, 0.6, now_s=self.now_s, wake_limits=True)
+            elif rel >= 5.30 and self._kicked_off_phase < 4:
+                self._kicked_off_phase = 4
+                self._reaction_mood = "NEUTRAL"
+                self._reaction_heart = False
+                self._emit_tag(mood="NEUTRAL")
+                if self.dock.is_docked():
+                    self.servos.move_to(0.0, 2.0, 0.4, now_s=self.now_s, wake_limits=True)
+
+            if rel < 1.40:
+                gaze_x = -0.35 + 0.35 * math.sin(rel * 1.8)
+                gaze_y = -0.50
+            elif rel < 3.45:
+                # Yawn while pulling up the cozy starry blanket
+                u = rel - 1.40
+                blanket_alpha = min(1.0, max(0.0, (u - 0.35) / 1.55))
+                if u < 0.45:
+                    mouth_open = u / 0.45
+                    l_open = 1.0 - (u / 0.45)
+                    r_open = 1.0 - 0.65 * (u / 0.45)
+                elif u < 1.45:
+                    mouth_open = 1.0
+                    mouth_wobble = 0.04 * math.sin(u * 18.0)
+                    bob_y = 1.4 * math.sin(u * 11.0)
+                    l_open, r_open = 0.0, 0.35
+                elif u < 1.80:
+                    pop_u = (u - 1.45) / 0.35
+                    mouth_open = max(0.0, 1.0 - pop_u)
+                    l_open = 0.0
+                    r_open = 0.35 * (1.0 - pop_u)
+                else:
+                    l_open, r_open = 0.0, 0.0
+                    face_mode = "sleep"
+                reaction_blink = 0.0
+            else:
+                # Snuggled under the blanket with gentle breathing & Zzz
+                blanket_alpha = 1.0 if rel < 5.30 else max(0.0, 1.0 - (rel - 5.30) / 0.50)
+                face_mode = "sleep"
+                l_open, r_open = 0.0, 0.0
+                bob_y = math.sin((rel - 3.45) * 2.2) * 0.8
+                zzz_phase = ((rel - 3.45) % 1.9) / 1.9
+                reaction_blink = 0.0
+
+        return (
+            bob_x,
+            bob_y,
+            eye_scale,
+            gaze_x,
+            gaze_y,
+            l_open,
+            r_open,
+            reaction_blink,
+            alert_alpha,
+            sweat_alpha,
+            umbrella_alpha,
+            weather_flash,
+            mouth_open,
+            mouth_wobble,
+            blanket_alpha,
+            jacket_alpha,
+            zzz_phase,
+            face_mode,
+            face_scale,
+            weather_bolt,
         )
 
     def _build_yawn_frame(self, elapsed: float, sound_start: float) -> FaceFrameState:

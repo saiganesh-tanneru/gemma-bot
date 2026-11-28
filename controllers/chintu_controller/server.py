@@ -39,6 +39,11 @@ CHINTU_STATUS: Dict[str, Any] = {
     "tts_calls_during_wake": 0,
     "host_audio": False,
     "last_audio_cue": None,
+    "weather": None,
+    "weather_ambient": True,
+    "weather_unit": "C",
+    "weather_fetching": False,
+    "weather_error": None,
     "tag_log": [],
     "frame": {},
 }
